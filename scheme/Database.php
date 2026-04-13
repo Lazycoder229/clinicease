@@ -218,11 +218,18 @@ class Database {
     {
         $name = trim($name);
 
+        // Function calls like CONCAT(a, b, c)
         if (preg_match('/\w+\s*\(.*\)/', $name)) {
             return true;
         }
 
+        // Simple identifiers with optional alias: column, table.column, etc.
         if (preg_match('/^[a-zA-Z0-9_\.]+(\s+(as\s+)?[a-zA-Z0-9_]+)?$/i', $name)) {
+            return true;
+        }
+
+        // Computed expressions with optional alias: (expression) or (expression) AS alias
+        if (preg_match('/^\(.*\)(\s+(as\s+)?[a-zA-Z0-9_]+)?$/i', $name)) {
             return true;
         }
 
@@ -288,7 +295,7 @@ class Database {
         } catch (Exception $e) {
             http_response_code(500);
             $error = $e->getMessage() . "<br>Query:  $this->getSQL";
-            include dirname(__DIR__) . '/views/errors/500.php';
+            include dirname(__DIR__) . '/app/views/errors/500.php';
             exit;
             
         }
@@ -508,7 +515,8 @@ class Database {
      */
     public function select($columns)
     {
-        $columns = explode(',', $columns);
+        // Smart split that respects parentheses in functions like CONCAT()
+        $columns = $this->smart_split_comma($columns);
         foreach ($columns as $key => $column) {
             $this->validate_identifier($column);
             $columns[$key] = trim($column);
@@ -518,6 +526,44 @@ class Database {
 
         $this->columns = "{$columns}";
         return $this;
+    }
+
+    /**
+     * Smart comma split that respects parentheses
+     * Prevents splitting commas inside function calls like CONCAT(a, b, c)
+     *
+     * @param  string $string
+     * @return array
+     */
+    private function smart_split_comma($string)
+    {
+        $parts = [];
+        $current = '';
+        $depth = 0;
+        $len = strlen($string);
+        
+        for ($i = 0; $i < $len; $i++) {
+            $char = $string[$i];
+            
+            if ($char === '(') {
+                $depth++;
+                $current .= $char;
+            } elseif ($char === ')') {
+                $depth--;
+                $current .= $char;
+            } elseif ($char === ',' && $depth === 0) {
+                $parts[] = $current;
+                $current = '';
+            } else {
+                $current .= $char;
+            }
+        }
+        
+        if ($current !== '') {
+            $parts[] = $current;
+        }
+        
+        return $parts;
     }
 
     /**
@@ -1149,15 +1195,42 @@ class Database {
     public function order_by($field_name, $order = null)
     {
         $field_name = trim($field_name);
-        $this->validate_identifier($field_name);
-
+        
+        // Handle multiple order fields separated by commas
+        $fields = $this->smart_split_comma($field_name);
+        
         $this->orderBy = ' ORDER BY ';
-        if (! is_null($order)) {
-            $this->orderBy .= $field_name . ' ' . strtoupper($order);
-        } else {
-            $this->orderBy .= stristr($field_name, ' ') || strtolower($field_name) === 'rand()'
-                ? $field_name
-                : $field_name . ' ASC';
+        $orderParts = [];
+        
+        foreach ($fields as $field) {
+            $field = trim($field);
+            
+            // Extract column name and direction from field
+            // Examples: "a.date DESC", "column", "rand()"
+            preg_match('/^(.+?)\s+(ASC|DESC)$/i', $field, $matches);
+            
+            if (!empty($matches)) {
+                // Field has explicit direction
+                $column = trim($matches[1]);
+                $direction = strtoupper($matches[2]);
+                $this->validate_identifier($column);
+                $orderParts[] = $column . ' ' . $direction;
+            } else {
+                // Field without explicit direction
+                $this->validate_identifier($field);
+                if (stristr($field, ' ') || strtolower($field) === 'rand()') {
+                    $orderParts[] = $field;
+                } else {
+                    $orderParts[] = $field . ' ASC';
+                }
+            }
+        }
+        
+        $this->orderBy .= implode(', ', $orderParts);
+        
+        // Handle legacy $order parameter if provided
+        if (!is_null($order)) {
+            $this->orderBy = ' ORDER BY ' . $field_name . ' ' . strtoupper($order);
         }
 
         return $this;
@@ -1280,7 +1353,7 @@ class Database {
         } catch (Exception $e) {
             http_response_code(500);
             $error = $e->getMessage() . "<br>Query:  $this->getSQL";
-            include dirname(__DIR__) . '/views/errors/500.php';
+            include dirname(__DIR__) . '/app/views/errors/500.php';
             exit;
         }
     }
@@ -1302,7 +1375,7 @@ class Database {
         } catch (Exception $e) {
             http_response_code(500);
             $error = $e->getMessage() . "<br>Query:  $this->getSQL";
-            include dirname(__DIR__) . '/views/errors/500.php';
+            include dirname(__DIR__) . '/app/views/errors/500.php';
             exit;
         }
     }
