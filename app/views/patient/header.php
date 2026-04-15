@@ -6,13 +6,13 @@
     <title>Document</title>
 </head>
 <body>
-     <header class="topbar">
+  <header class="topbar">
     <div style="display:flex;align-items:center;gap:14px;">
       <button class="icon-btn hamburger" id="hamburger" onclick="toggleSidebar()">
         <i class="fa-solid fa-bars"></i>
       </button>
       <div class="topbar-left">
-        <h2>Good morning, <?= $first_name ?> <?= $last_name ?> 👋</h2>
+        <h2>Good morning, <?= htmlspecialchars($_SESSION['first_name'] ?? 'User') ?> <?= htmlspecialchars($_SESSION['last_name'] ?? '') ?> 👋</h2>
         <p><?= date('l, F j, Y') ?></p>
       </div>
     </div>

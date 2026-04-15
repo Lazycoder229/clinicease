@@ -44,9 +44,9 @@
   <a href="<?= url('patient/profile') ?>" class="nav-link">
     <i class="fa-solid fa-user-circle"></i> My Profile
   </a>
-  <a href="<?= url('patient/settings') ?>" class="nav-link">
+ <!--  <a href="<?= url('patient/settings') ?>" class="nav-link">
     <i class="fa-solid fa-gear"></i> Settings
-  </a>
+  </a> -->
 
   <div class="sidebar-footer">
      <a href="<?= url('/logout') ?>" class="logout-btn">

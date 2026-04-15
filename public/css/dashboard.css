@@ -374,3 +374,134 @@ body {
 .d3 { animation-delay: .15s; }
 .d4 { animation-delay: .20s; }
 .d5 { animation-delay: .25s; }
+
+/* ── Doctor Dashboard Specific Styles ── */
+.welcome-section {
+    margin-bottom: 2rem;
+}
+
+.welcome-section h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--navy);
+}
+
+.welcome-section p {
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.stat-card {
+    background: var(--card);
+    border: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    border-radius: 12px;
+}
+
+.stat-card.bg-primary {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+
+.stat-card.bg-info {
+    background: linear-gradient(135deg, #06b6d4, #0891b2);
+}
+
+.stat-card.bg-warning {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+
+.stat-card.bg-success {
+    background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.appointment-list,
+.records-list,
+.prescriptions-list,
+.messages-list {
+    max-height: 350px;
+    overflow-y: auto;
+}
+
+.appointment-item,
+.record-item,
+.prescription-item,
+.message-item {
+    transition: background-color 0.2s ease;
+}
+
+.appointment-item:hover,
+.record-item:hover,
+.prescription-item:hover,
+.message-item:hover {
+    background-color: #f9fafb;
+}
+
+.card {
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    transition: box-shadow 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 8px 24px rgba(0,0,0,.1);
+}
+
+.card-header {
+    background-color: #f9fafb;
+    border-radius: 12px 12px 0 0;
+}
+
+.card-header h5 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--navy);
+}
+
+.card-footer {
+    background-color: #f9fafb;
+    border-radius: 0 0 12px 12px;
+}
+
+.btn-outline-primary:hover,
+.btn-outline-success:hover,
+.btn-outline-info:hover,
+.btn-outline-warning:hover {
+    transform: translateY(-1px);
+}
+
+.badge {
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+}
+
+/* Scrollbar styling */
+.appointment-list::-webkit-scrollbar,
+.records-list::-webkit-scrollbar,
+.prescriptions-list::-webkit-scrollbar,
+.messages-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.appointment-list::-webkit-scrollbar-track,
+.records-list::-webkit-scrollbar-track,
+.prescriptions-list::-webkit-scrollbar-track,
+.messages-list::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 10px;
+}
+
+.appointment-list::-webkit-scrollbar-thumb,
+.records-list::-webkit-scrollbar-thumb,
+.prescriptions-list::-webkit-scrollbar-thumb,
+.messages-list::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 10px;
+}
+
+.appointment-list::-webkit-scrollbar-thumb:hover,
+.records-list::-webkit-scrollbar-thumb:hover,
+.prescriptions-list::-webkit-scrollbar-thumb:hover,
+.messages-list::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}

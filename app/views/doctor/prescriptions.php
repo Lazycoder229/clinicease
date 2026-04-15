@@ -341,32 +341,7 @@ $formMap = [
 </head>
 <body>
 
-<aside class="sidebar" id="sidebar">
-  <div class="sidebar-logo">
-    <div class="icon-box"><i class="fa-solid fa-heart-pulse" style="color:#fff;font-size:16px;"></i></div>
-    <span>ClinicEase</span>
-  </div>
-  <div class="sidebar-section">Main Menu</div>
-  <a href="dashboard.php"     class="nav-link"><i class="fa-solid fa-house"></i>Dashboard</a>
-  <a href="appointments.php"  class="nav-link"><i class="fa-solid fa-calendar-check"></i>Appointments</a>
-  <a href="patients.php"      class="nav-link"><i class="fa-solid fa-users"></i>Patients</a>
-  <a href="prescriptions.php" class="nav-link active"><i class="fa-solid fa-prescription-bottle-medical"></i>Prescriptions
-    <?php if ($counts['pending_refills'] > 0): ?>
-    <span class="badge-count"><?= $counts['pending_refills'] ?></span>
-    <?php endif; ?>
-  </a>
-  <a href="records.php"       class="nav-link"><i class="fa-solid fa-file-medical"></i>Health Records</a>
-  <div class="sidebar-section">Account</div>
-  <a href="profile.php"  class="nav-link"><i class="fa-solid fa-user"></i>Profile</a>
-  <a href="settings.php" class="nav-link"><i class="fa-solid fa-gear"></i>Settings</a>
-  <div class="sidebar-footer">
-    <div class="user-chip">
-      <div class="user-avatar"><?= strtoupper(substr($full_name,0,1)) ?></div>
-      <div><div class="user-name">Dr. <?= $full_name ?></div><div class="user-role">Doctor</div></div>
-    </div>
-    <a href="../logout.php" class="logout-btn"><i class="fa-solid fa-right-from-bracket"></i>Sign Out</a>
-  </div>
-</aside>
+<?php include 'aside.php'; ?>
 
 <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
 

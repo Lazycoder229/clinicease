@@ -12,7 +12,7 @@
         <i class="fa-solid fa-bars"></i>
       </button>
       <div class="topbar-left">
-        <h2>Good morning, Dr. <?= $last_name ?> 👋</h2>
+        <h2>Good morning, Dr. <?= htmlspecialchars($last_name ?? 'Doctor') ?> 👋</h2>
         <p><?= date('l, F j, Y') ?></p>
       </div>
     </div>

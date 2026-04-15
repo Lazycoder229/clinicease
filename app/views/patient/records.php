@@ -1,13 +1,11 @@
 <?php
-// Session already started in helpers.php
-if (!isset($_SESSION['user_id'])) {
-    header('Location: ../index.php');
+// Patient Records - View-Only Medical History
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'patient') {
+    header('Location: ' . url('auth/login'));
     exit;
 }
 
 $userId = (int) $_SESSION['user_id'];
-
-/* ─── Database connection ─── */
 $db = new Database();
 
 /* ─── Resolve patient_id ─── */
@@ -15,31 +13,29 @@ $patientRow = $db->table('patients')->where('user_id', $userId)->get();
 if (!$patientRow) die('Patient record not found.');
 $patientId = (int) $patientRow['patient_id'];
 
-/* ─── Current user display info ─── */
-$currentUser = $db->table('users u')
-    ->select('u.username, u.role, CONCAT(p.first_name, \' \', p.last_name) AS full_name')
-    ->inner_join('user_profiles p', 'u.user_id = p.user_id')
+/* ─── Get patient name ─── */
+$me = $db->table('users u')
+    ->select('CONCAT(p.first_name, \' \', p.last_name) AS full_name, u.role')
+    ->join('user_profiles p', 'u.user_id = p.user_id', 'INNER ')
     ->where('u.user_id', $userId)
     ->get();
-$fullName = htmlspecialchars($currentUser['full_name'] ?? '');
-$role     = htmlspecialchars($currentUser['role'] ?? 'patient');
+$fullName = htmlspecialchars($me['full_name'] ?? 'Patient');
 
-/* ─── Latest vitals ─── */
+/* ─── Latest vitals from health_metrics ─── */
 $latestVitals = $db->table('health_metrics hm')
     ->where('hm.patient_id', $patientId)
     ->order_by('hm.recorded_at', 'DESC')
     ->limit(1)
     ->get();
 
-/* ─── Vitals trend (last 6 months) ─── */
+/* ─── Vitals trend (last 6 months) from health_metrics ─── */
 $vitalsHistory = $db->table('health_metrics')
     ->select('DATE(recorded_at) AS date, blood_pressure_sys, blood_pressure_dia, heart_rate, blood_sugar, weight_kg, bmi')
     ->where('patient_id', $patientId)
-    ->where('recorded_at', '>=', 'DATE_SUB(NOW(), INTERVAL 6 MONTH)')
     ->order_by('recorded_at', 'ASC')
     ->get_all();
 
-/* ─── Health records list ─── */
+/* ─── Health records list - JOIN with doctors for doctor name and specialization ─── */
 $records = $db->table('health_records hr')
     ->select('hr.record_id, hr.record_date, hr.visit_type, hr.chief_complaint, hr.diagnosis, hr.treatment, hr.prescription, hr.blood_pressure, hr.heart_rate, hr.temperature, hr.oxygen_saturation, hr.weight_kg, hr.bmi, hr.doctor_notes, hr.lab_results, hr.status, CONCAT(dp.first_name, \' \', dp.last_name) AS doctor_name, d.specialization')
     ->join('doctors d', 'hr.doctor_id = d.doctor_id', 'INNER ')
@@ -48,16 +44,10 @@ $records = $db->table('health_records hr')
     ->order_by('hr.record_date', 'DESC')
     ->get_all();
 
-/* ─── View single record (for modal) ─── */
-$viewRecord = null;
-if (!empty($_GET['view'])) {
-    $viewRecord = $db->table('health_records hr')
-        ->select('hr.record_id, hr.record_date, hr.visit_type, hr.chief_complaint, hr.diagnosis, hr.treatment, hr.prescription, hr.blood_pressure, hr.heart_rate, hr.temperature, hr.oxygen_saturation, hr.weight_kg, hr.bmi, hr.doctor_notes, hr.lab_results, hr.status, CONCAT(dp.first_name, \' \', dp.last_name) AS doctor_name, d.specialization')
-        ->join('doctors d', 'hr.doctor_id = d.doctor_id', 'INNER ')
-        ->join('user_profiles dp', 'd.user_id = dp.user_id', 'INNER ')
-        ->where('hr.record_id', (int)$_GET['view'])
-        ->where('hr.patient_id', $patientId)
-        ->get();
+/* ─── Prepare records by ID for modal JavaScript ─── */
+$recordsById = [];
+foreach ($records as $record) {
+    $recordsById[$record['record_id']] = $record;
 }
 
 /* ─── Type icon/color map ─── */
@@ -102,338 +92,292 @@ function bmiColor(float $bmi): string {
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ClinicEase — Health Records</title>
+  <title>My Health Records — ClinicEase</title>
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous"/>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-   <link rel="stylesheet" href="<?= url('public/css/record.css') ?>">
+  <style>
+    :root {
+      --sidebar-w: 260px;
+      --teal: #0d9488;
+      --teal-light: #ccfbf1;
+      --navy: #0f172a;
+      --muted: #64748b;
+      --surface: #f8fafc;
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --accent: #f59e0b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', sans-serif; background: var(--surface); color: var(--navy); display: flex; min-height: 100vh; }
+
+    .sidebar { width: var(--sidebar-w); background: var(--navy); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh; z-index: 50; transition: transform .3s; }
+    .sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 28px 24px 24px; border-bottom: 1px solid rgba(255,255,255,.08); }
+    .sidebar-logo .icon-box { width: 36px; height: 36px; border-radius: 10px; background: var(--teal); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .sidebar-logo span { font-weight: 700; font-size: 16px; color: #fff; }
+    .sidebar-section { padding: 20px 16px 8px; font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: #475569; text-transform: uppercase; }
+    .nav-link { display: flex; align-items: center; gap: 12px; padding: 10px 16px; margin: 2px 8px; border-radius: 10px; color: #94a3b8; font-size: 14px; font-weight: 500; text-decoration: none; transition: background .2s, color .2s; }
+    .nav-link i { width: 18px; text-align: center; font-size: 14px; }
+    .nav-link:hover { background: rgba(255,255,255,.07); color: #e2e8f0; }
+    .nav-link.active { background: var(--teal); color: #fff; }
+    .badge-count { margin-left: auto; background: var(--accent); color: #fff; font-size: 10px; font-weight: 700; border-radius: 20px; padding: 1px 7px; }
+    .sidebar-footer { margin-top: auto; padding: 16px; border-top: 1px solid rgba(255,255,255,.08); }
+    .user-chip { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); margin-bottom: 10px; }
+    .user-avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--teal), #0ea5e9); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: #fff; flex-shrink: 0; }
+    .user-name { font-size: 13px; font-weight: 600; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-role { font-size: 11px; color: #64748b; text-transform: capitalize; }
+    .logout-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 10px; border-radius: 10px; background: rgba(239,68,68,.12); color: #f87171; font-size: 13px; font-weight: 600; border: none; cursor: pointer; text-decoration: none; transition: background .2s; }
+    .logout-btn:hover { background: rgba(239,68,68,.22); }
+
+    .main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; padding: 20px 32px; background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 40; }
+    .topbar-left h2 { font-size: 20px; font-weight: 700; }
+    .topbar-left p { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .topbar-right { display: flex; align-items: center; gap: 14px; }
+    .icon-btn { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); display: flex; align-items: center; justify-content: center; color: var(--muted); cursor: pointer; font-size: 15px; position: relative; transition: border-color .2s, color .2s; }
+    .icon-btn:hover { border-color: var(--teal); color: var(--teal); }
+    .hamburger { display: none; }
+    .content { padding: 32px; flex: 1; }
+
+    .role-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 8px; background: #dbeafe; color: #1d4ed8; font-size: 12px; font-weight: 700; margin-bottom: 20px; }
+
+    .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; display: flex; align-items: center; gap: 14px; transition: transform .2s, box-shadow .2s; }
+    .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.07); }
+    .stat-icon { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+    .stat-value { font-size: 24px; font-weight: 700; line-height: 1; }
+    .stat-label { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+    .section { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 20px; margin-bottom: 20px; overflow: hidden; }
+
+    .vital-card { display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+    .vital-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 16px; }
+    .vital-value { font-size: 16px; font-weight: 700; }
+    .vital-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .vital-note { font-size: 10px; margin-top: 2px; font-weight: 500; }
+
+    .record-item { padding: 16px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 12px; transition: all .2s; cursor: pointer; }
+    .record-item:hover { border-color: var(--teal); background: var(--surface); }
+
+    .record-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; font-size: 16px; }
+
+    .quick-link { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); font-size: 12px; font-weight: 600; color: var(--navy); text-decoration: none; transition: border-color .2s, background .2s, color .2s; }
+    .quick-link:hover { border-color: var(--teal); background: var(--teal-light); color: var(--teal); }
+
+    .empty-state { text-align: center; padding: 60px 24px; color: var(--muted); }
+    .empty-state .empty-icon { font-size: 40px; color: #cbd5e1; margin-bottom: 12px; }
+    .empty-state h4 { font-size: 15px; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
+    .empty-state p { font-size: 13px; }
+
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100; align-items: center; justify-content: center; }
+    .modal.open { display: flex; }
+    .modal-content { background: var(--card); border-radius: 16px; padding: 28px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .modal-header h2 { font-size: 18px; font-weight: 700; }
+    .modal-close { width: 32px; height: 32px; border: none; background: var(--surface); border-radius: 8px; cursor: pointer; font-size: 16px; color: var(--muted); }
+
+    .detail-section { margin-bottom: 20px; }
+    .detail-section-title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 12px; }
+    .detail-grid { display: grid; gap: 12px; }
+    .detail-item { padding: 12px; background: var(--surface); border-radius: 8px; }
+    .detail-item.full { grid-column: 1 / -1; }
+    .d-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+    .d-value { font-size: 13px; color: var(--navy); }
+
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 45; }
+    .overlay.open { display: block; }
+
+    @keyframes fadein { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .fade-up { animation: fadein .4s ease both; }
+    .d1 { animation-delay: .05s } .d2 { animation-delay: .10s } .d3 { animation-delay: .15s }
+
+    @media (max-width: 768px) {
+      .sidebar { transform: translateX(-100%); } .sidebar.open { transform: translateX(0); }
+      .main { margin-left: 0; } .hamburger { display: flex; }
+      .content { padding: 20px 16px; } .topbar { padding: 16px 20px; }
+      [style*="grid-template-columns:repeat(auto-fit"] { grid-template-columns: 1fr !important; }
+    }
+  </style>
 </head>
 <body>
-<!-- ── Sidebar ── -->
+
 <?php include 'aside.php'; ?>
 
 <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
 
-<!-- ── Main ── -->
 <main class="main">
 
   <div class="topbar">
     <div style="display:flex;align-items:center;gap:12px;">
       <button class="icon-btn hamburger" onclick="toggleSidebar()"><i class="fa-solid fa-bars"></i></button>
       <div class="topbar-left">
-        <h2>Health Records</h2>
-        <p>Your complete medical history and vitals</p>
+        <h2>My Health Records</h2>
+        <p><?= date('l, F j, Y') ?></p>
       </div>
     </div>
-   
+    <div class="topbar-right">
+      <div class="icon-btn" title="Notifications"><i class="fa-regular fa-bell"></i></div>
+      <div class="icon-btn" title="Help"><i class="fa-regular fa-circle-question"></i></div>
+    </div>
   </div>
 
   <div class="content">
 
-    <!-- ── Vitals Summary Cards ── -->
-    <div class="vitals-grid fade-up d1">
+    <div class="role-badge fade-up d1">
+      <i class="fa-solid fa-file-medical"></i>Your Complete Medical History
+    </div>
 
+    <!-- Vitals Summary -->
+    <?php if ($latestVitals): ?>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:24px;width:100%;">
       <?php
-      $bp  = $latestVitals ? ($latestVitals['blood_pressure_sys'] . '/' . $latestVitals['blood_pressure_dia'] . ' mmHg') : '—';
-      $hr  = $latestVitals ? ($latestVitals['heart_rate'] . ' bpm') : '—';
-      $sg  = $latestVitals ? ($latestVitals['blood_sugar'] . ' mg/dL') : '—';
-      $spo = $latestVitals ? ($latestVitals['oxygen_saturation'] . '%') : '—';
-      $tmp = $latestVitals ? ($latestVitals['temperature'] . ' °C') : '—';
-      $bmi = $latestVitals && $latestVitals['bmi']
-               ? $latestVitals['bmi'] . ' (' . bmiLabel((float)$latestVitals['bmi']) . ')'
-               : '—';
-      $bmiC = $latestVitals && $latestVitals['bmi'] ? bmiColor((float)$latestVitals['bmi']) : '#64748b';
-
-      $vitCards = [
-        ['icon'=>'fa-heart-pulse',      'color'=>'#ef4444','bg'=>'#fee2e2', 'label'=>'Blood Pressure',     'value'=>$bp,  'note'=>'Systolic / Diastolic'],
-        ['icon'=>'fa-droplet',          'color'=>'#0d9488','bg'=>'#ccfbf1', 'label'=>'Blood Sugar',         'value'=>$sg,  'note'=>'Fasting glucose'],
-        ['icon'=>'fa-wave-square',      'color'=>'#3b82f6','bg'=>'#dbeafe', 'label'=>'Heart Rate',          'value'=>$hr,  'note'=>'Beats per minute'],
-        ['icon'=>'fa-lungs',            'color'=>'#0ea5e9','bg'=>'#e0f2fe', 'label'=>'Oxygen Saturation',   'value'=>$spo, 'note'=>'SpO₂'],
-        ['icon'=>'fa-temperature-half', 'color'=>'#a855f7','bg'=>'#f3e8ff', 'label'=>'Temperature',         'value'=>$tmp, 'note'=>'Body temp'],
-        ['icon'=>'fa-weight-scale',     'color'=>$bmiC,    'bg'=>'#f1f5f9', 'label'=>'BMI',                 'value'=>$bmi, 'note'=>'Body Mass Index'],
-      ];
-      foreach ($vitCards as $v): ?>
-      <div class="vital-card">
+        $vitals_list = [
+          ['icon'=>'fa-heart-pulse',      'color'=>'#ef4444','bg'=>'#fee2e2', 'label'=>'Blood Pressure', 'value'=>$latestVitals['blood_pressure_sys'].'/'.$latestVitals['blood_pressure_dia'].' mmHg'],
+          ['icon'=>'fa-wave-square',      'color'=>'#3b82f6','bg'=>'#dbeafe', 'label'=>'Heart Rate',     'value'=>$latestVitals['heart_rate'].' bpm'],
+          ['icon'=>'fa-droplet',          'color'=>'#0d9488','bg'=>'#ccfbf1', 'label'=>'Blood Sugar',    'value'=>$latestVitals['blood_sugar'].' mg/dL'],
+          ['icon'=>'fa-lungs',            'color'=>'#0ea5e9','bg'=>'#e0f2fe', 'label'=>'Oxygen Sat.',     'value'=>$latestVitals['oxygen_saturation'].'%'],
+          ['icon'=>'fa-temperature-half', 'color'=>'#a855f7','bg'=>'#f3e8ff', 'label'=>'Temperature',    'value'=>$latestVitals['temperature'].' °C'],
+          ['icon'=>'fa-weight-scale',     'color'=>'#d97706','bg'=>'#fef3c7', 'label'=>'Weight',         'value'=>$latestVitals['weight_kg'].' kg'],
+        ];
+        foreach($vitals_list as $v):
+      ?>
+      <div class="vital-card fade-up d1">
         <div class="vital-icon" style="background:<?= $v['bg'] ?>;color:<?= $v['color'] ?>;">
           <i class="fa-solid <?= $v['icon'] ?>"></i>
         </div>
-        <div>
-          <div class="vital-value"><?= htmlspecialchars($v['value']) ?></div>
-          <div class="vital-label"><?= $v['label'] ?></div>
-          <div class="vital-note" style="color:<?= $v['color'] ?>"><?= $v['note'] ?></div>
-        </div>
+        <div class="vital-value"><?= htmlspecialchars($v['value']) ?></div>
+        <div class="vital-label"><?= $v['label'] ?></div>
       </div>
       <?php endforeach; ?>
-
-    </div>
-
-    <!-- ── Charts ── -->
-    <?php if (!empty($vitalsHistory)): ?>
-    <div class="row-2 fade-up d2">
-
-      <!-- Blood Pressure Chart -->
-      <div class="panel">
-        <div class="panel-header">
-          <h3><i class="fa-solid fa-heart-pulse" style="color:#ef4444;margin-right:8px;"></i>Blood Pressure Trend</h3>
-        </div>
-        <div class="chart-wrap"><canvas id="bpChart" height="180"></canvas></div>
-      </div>
-
-      <!-- Blood Sugar + Weight Chart -->
-      <div class="panel">
-        <div class="panel-header">
-          <h3><i class="fa-solid fa-droplet" style="color:#0d9488;margin-right:8px;"></i>Blood Sugar Trend</h3>
-        </div>
-        <div class="chart-wrap"><canvas id="sgChart" height="180"></canvas></div>
-      </div>
-
     </div>
     <?php endif; ?>
 
-    <!-- ── Records List ── -->
-    <div class="records-panel fade-up d3">
-      <div class="records-panel-header">
-        <h3><i class="fa-solid fa-folder-open" style="color:var(--teal);margin-right:8px;"></i>
-          Visit Records
-          <span style="font-size:12px;font-weight:500;color:var(--muted);margin-left:6px;"><?= count($records) ?> total</span>
-        </h3>
-        <div class="filter-tabs">
-          <button class="filter-tab active" onclick="filterRecords('all',this)">All</button>
-          <button class="filter-tab" onclick="filterRecords('general check-up',this)">Check-ups</button>
-          <button class="filter-tab" onclick="filterRecords('laboratory',this)">Lab</button>
-          <button class="filter-tab" onclick="filterRecords('vaccination',this)">Vaccines</button>
-        </div>
+    <!-- Records Section -->
+    <div class="section fade-up d2">
+      <div style="margin-bottom:20px;">
+        <h3 style="font-size:15px;font-weight:700;color:var(--navy);margin-bottom:4px;">Visit Records</h3>
+        <p style="font-size:12px;color:var(--muted);"><?= count($records) ?> record<?= count($records) !== 1 ? 's' : '' ?> from your doctors</p>
       </div>
 
       <?php if (empty($records)): ?>
-        <div class="empty-state">
-          <i class="fa-regular fa-folder-open"></i>
-          <p>No health records found.</p>
-        </div>
+      <div class="empty-state">
+        <div class="empty-icon"><i class="fa-solid fa-file-circle-xmark"></i></div>
+        <h4>No health records yet</h4>
+        <p>Your doctors' visit records will appear here</p>
+      </div>
       <?php else: ?>
-        <?php foreach ($records as $i => $rec):
-          $t = $typeMap[$rec['visit_type']] ?? $typeMap['Other'];
-          $s = $statusColors[$rec['status']] ?? ['color'=>'#64748b','bg'=>'#f1f5f9'];
-        ?>
-        <div class="record-item"
-             data-type="<?= strtolower(htmlspecialchars($rec['visit_type'])) ?>"
-             onclick="openRecord(<?= $rec['record_id'] ?>)"
-             style="animation: fadein .4s ease <?= $i * 0.05 ?>s both;">
-          <div class="record-dot" style="background:<?= $t['bg'] ?>;color:<?= $t['color'] ?>;">
-            <i class="fa-solid <?= $t['icon'] ?>"></i>
-          </div>
-          <div class="record-info">
-            <div class="record-title"><?= htmlspecialchars($rec['visit_type']) ?></div>
-            <div class="record-sub">
-              <i class="fa-regular fa-calendar" style="margin-right:4px;"></i>
-              <?= date('M j, Y', strtotime($rec['record_date'])) ?>
-              &nbsp;·&nbsp;
-              <i class="fa-solid fa-user-doctor" style="margin-right:4px;"></i>
-              Dr. <?= htmlspecialchars($rec['doctor_name']) ?>
-              &nbsp;·&nbsp; <?= htmlspecialchars($rec['specialization']) ?>
+      <div style="display:grid;gap:12px;">
+        <?php foreach ($records as $i => $record): ?>
+        <div class="record-item fade-up" onclick="openRecord(<?= $record['record_id'] ?>)" style="animation-delay:<?= ($i * 0.05) ?>s">
+          <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;">
+            <div style="flex:1;">
+              <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:4px;">
+                <?= htmlspecialchars($record['visit_type']) ?>
+              </div>
+              <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">
+                <i class="fa-regular fa-calendar" style="margin-right:4px;"></i><?= date('M d, Y', strtotime($record['record_date'])) ?>
+                &nbsp;·&nbsp;
+                <i class="fa-solid fa-user-doctor" style="margin-right:4px;"></i>Dr. <?= htmlspecialchars($record['doctor_name']) ?>
+              </div>
+              <?php if ($record['diagnosis']): ?>
+              <div style="font-size:12px;color:var(--navy);font-style:italic;margin-top:6px;">
+                <?= htmlspecialchars(substr($record['diagnosis'], 0, 100)) ?><?= strlen($record['diagnosis']) > 100 ? '...' : '' ?>
+              </div>
+              <?php endif; ?>
             </div>
-            <?php if ($rec['diagnosis']): ?>
-            <div class="record-diag">"<?= htmlspecialchars($rec['diagnosis']) ?>"</div>
-            <?php endif; ?>
+            <span style="background:var(--teal-light);color:var(--teal);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;white-space:nowrap;">
+              <?= htmlspecialchars($record['status']) ?>
+            </span>
           </div>
-          <span class="record-badge" style="background:<?= $s['bg'] ?>;color:<?= $s['color'] ?>;">
-            <?= htmlspecialchars($rec['status']) ?>
-          </span>
-          <button class="view-btn" title="View details" onclick="event.stopPropagation(); openRecord(<?= $rec['record_id'] ?>)">
-            <i class="fa-solid fa-chevron-right"></i>
-          </button>
         </div>
         <?php endforeach; ?>
+      </div>
       <?php endif; ?>
+
     </div>
 
-  </div><!-- /content -->
+  </div>
 </main>
 
-<!-- ═══════════════════════════════════════
-     RECORD DETAIL MODAL
-═══════════════════════════════════════ -->
-<div class="modal-overlay" id="recordModal">
-  <div class="modal-box" id="modalContent">
-    <button class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
-    <div id="modalBody">
-      <!-- Injected via JS / PHP partial below -->
+<!-- Record Detail Modal -->
+<div class="modal" id="recordModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>Record Details</h2>
+      <button class="modal-close" onclick="closeRecordModal()"><i class="fa-solid fa-xmark"></i></button>
     </div>
+    <div id="modalBody"></div>
   </div>
 </div>
 
-<?php
-/* ── Pre-render all records as hidden data for JS modal ── */
-$recordsById = [];
-foreach ($records as $r) {
-    $recordsById[$r['record_id']] = $r;
-}
-?>
 <script>
-/* ─── Sidebar ─── */
-function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('open');
-  document.getElementById('overlay').classList.toggle('open');
-}
-function closeSidebar() {
-  document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('overlay').classList.remove('open');
-}
+  const RECORDS = <?= json_encode($recordsById ?? [], JSON_HEX_TAG | JSON_HEX_APOS) ?>;
 
-/* ─── Records data from PHP ─── */
-const RECORDS = <?= json_encode($recordsById, JSON_HEX_TAG | JSON_HEX_APOS) ?>;
+  function openRecord(id) {
+    const r = RECORDS[id];
+    if (!r) return;
 
-const TYPE_MAP = <?= json_encode($typeMap, JSON_HEX_TAG) ?>;
-const STATUS_COLORS = <?= json_encode($statusColors, JSON_HEX_TAG) ?>;
+    const val = v => v || '<span style="color:#94a3b8">—</span>';
 
-function bmiLabel(bmi) {
-  if (bmi < 18.5) return 'Underweight';
-  if (bmi < 25)   return 'Normal';
-  if (bmi < 30)   return 'Overweight';
-  return 'Obese';
-}
-
-function openRecord(id) {
-  const r = RECORDS[id];
-  if (!r) return;
-
-  const t = TYPE_MAP[r.visit_type]    || { icon:'fa-file-medical', color:'#64748b', bg:'#f1f5f9' };
-  const s = STATUS_COLORS[r.status]   || { color:'#64748b', bg:'#f1f5f9' };
-
-  const fmtDate = d => d ? new Date(d).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' }) : '—';
-  const val     = v => v || '<span style="color:#94a3b8">—</span>';
-
-  const vitals = [
-    { icon:'fa-heart-pulse',      color:'#ef4444', label:'Blood Pressure', value: r.blood_pressure ? r.blood_pressure + ' mmHg' : null },
-    { icon:'fa-wave-square',      color:'#3b82f6', label:'Heart Rate',     value: r.heart_rate ? r.heart_rate + ' bpm' : null },
-    { icon:'fa-temperature-half', color:'#a855f7', label:'Temperature',    value: r.temperature ? r.temperature + ' °C' : null },
-    { icon:'fa-lungs',            color:'#0ea5e9', label:'SpO₂',           value: r.oxygen_saturation ? r.oxygen_saturation + '%' : null },
-    { icon:'fa-weight-scale',     color:'#d97706', label:'Weight',         value: r.weight_kg ? r.weight_kg + ' kg' : null },
-    { icon:'fa-ruler-vertical',   color:'#10b981', label:'BMI',            value: r.bmi ? r.bmi + ' (' + bmiLabel(parseFloat(r.bmi)) + ')' : null },
-  ].filter(v => v.value);
-
-  const vitPills = vitals.map(v => `
-    <div class="vital-pill">
-      <i class="fa-solid ${v.icon}" style="color:${v.color}"></i>
-      <div>
-        <div class="vp-label">${v.label}</div>
-        <div class="vp-value">${v.value}</div>
+    let html = `
+      <div class="detail-section">
+        <h3 style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--navy);">
+          ${r.visit_type}
+        </h3>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">
+          ${new Date(r.record_date).toLocaleDateString()}
+          &nbsp;·&nbsp;
+          Dr. ${r.doctor_name}
+          &nbsp;·&nbsp; ${r.specialization}
+        </p>
       </div>
-    </div>`).join('');
 
-  document.getElementById('modalBody').innerHTML = `
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
-      <div style="width:46px;height:46px;border-radius:13px;background:${t.bg};color:${t.color};display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
-        <i class="fa-solid ${t.icon}"></i>
-      </div>
-      <div>
-        <div class="modal-title" style="margin-bottom:2px;">${r.visit_type}</div>
-        <div class="modal-subtitle" style="margin-bottom:0;">
-          ${fmtDate(r.record_date)} &nbsp;·&nbsp;
-          Dr. ${r.doctor_name} &nbsp;·&nbsp; ${r.specialization}
-          &nbsp;&nbsp;<span style="background:${s.bg};color:${s.color};font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;">${r.status}</span>
+      <div class="detail-section">
+        <div class="detail-section-title">Clinical Details</div>
+        <div class="detail-grid">
+          ${r.chief_complaint ? `<div class="detail-item full"><div class="d-label">Chief Complaint</div><div class="d-value">${val(r.chief_complaint)}</div></div>` : ''}
+          ${r.diagnosis ? `<div class="detail-item full"><div class="d-label">Diagnosis</div><div class="d-value">${val(r.diagnosis)}</div></div>` : ''}
+          ${r.treatment ? `<div class="detail-item full"><div class="d-label">Treatment</div><div class="d-value">${val(r.treatment)}</div></div>` : ''}
+          ${r.prescription ? `<div class="detail-item full"><div class="d-label">Prescription</div><div class="d-value">${val(r.prescription)}</div></div>` : ''}
         </div>
       </div>
-    </div>
-    <hr style="border:none;border-top:1px solid var(--border);margin:18px 0;">
 
-    ${vitals.length ? `
-    <div class="detail-section">
-      <div class="detail-section-title">Vitals at Visit</div>
-      <div class="vitals-row">${vitPills}</div>
-    </div>` : ''}
-
-    <div class="detail-section">
-      <div class="detail-section-title">Clinical Details</div>
-      <div class="detail-grid">
-        <div class="detail-item full">
-          <div class="d-label">Chief Complaint</div>
-          <div class="d-value">${val(r.chief_complaint)}</div>
+      ${(r.blood_pressure || r.heart_rate || r.temperature || r.oxygen_saturation) ? `
+      <div class="detail-section">
+        <div class="detail-section-title">Vitals at Visit</div>
+        <div class="detail-grid">
+          ${r.blood_pressure ? `<div class="detail-item"><div class="d-label">Blood Pressure</div><div class="d-value">${r.blood_pressure} mmHg</div></div>` : ''}
+          ${r.heart_rate ? `<div class="detail-item"><div class="d-label">Heart Rate</div><div class="d-value">${r.heart_rate} bpm</div></div>` : ''}
+          ${r.temperature ? `<div class="detail-item"><div class="d-label">Temperature</div><div class="d-value">${r.temperature} °C</div></div>` : ''}
+          ${r.oxygen_saturation ? `<div class="detail-item"><div class="d-label">Oxygen Sat.</div><div class="d-value">${r.oxygen_saturation}%</div></div>` : ''}
         </div>
-        <div class="detail-item full">
-          <div class="d-label">Diagnosis</div>
-          <div class="d-value">${val(r.diagnosis)}</div>
+      </div>` : ''}
+
+      ${r.doctor_notes ? `
+      <div class="detail-section">
+        <div class="detail-section-title">Doctor Notes</div>
+        <div class="detail-grid">
+          <div class="detail-item full"><div class="d-value">${val(r.doctor_notes)}</div></div>
         </div>
-        <div class="detail-item full">
-          <div class="d-label">Treatment</div>
-          <div class="d-value">${val(r.treatment)}</div>
-        </div>
-        <div class="detail-item full">
-          <div class="d-label">Prescription</div>
-          <div class="d-value">${val(r.prescription)}</div>
-        </div>
-      </div>
-    </div>
+      </div>` : ''}
+    `;
 
-    ${(r.doctor_notes || r.lab_results) ? `
-    <div class="detail-section">
-      <div class="detail-section-title">Additional Notes</div>
-      <div class="detail-grid">
-        ${r.doctor_notes ? `<div class="detail-item full"><div class="d-label">Doctor Notes</div><div class="d-value">${r.doctor_notes}</div></div>` : ''}
-        ${r.lab_results  ? `<div class="detail-item full"><div class="d-label">Lab Results</div><div class="d-value">${r.lab_results}</div></div>` : ''}
-      </div>
-    </div>` : ''}
-  `;
-
-  document.getElementById('recordModal').classList.add('open');
-}
-
-function closeModal() {
-  document.getElementById('recordModal').classList.remove('open');
-}
-document.getElementById('recordModal').addEventListener('click', e => {
-  if (e.target === document.getElementById('recordModal')) closeModal();
-});
-
-/* ─── Filter ─── */
-function filterRecords(type, btn) {
-  document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
-  btn.classList.add('active');
-  document.querySelectorAll('.record-item').forEach(item => {
-    item.style.display = (type === 'all' || item.dataset.type === type) ? 'flex' : 'none';
-  });
-}
-
-/* ─── Charts ─── */
-<?php if (!empty($vitalsHistory)): ?>
-const labels = <?= json_encode(array_column($vitalsHistory, 'date')) ?>;
-const sysList = <?= json_encode(array_column($vitalsHistory, 'blood_pressure_sys')) ?>;
-const diaList = <?= json_encode(array_column($vitalsHistory, 'blood_pressure_dia')) ?>;
-const sgList  = <?= json_encode(array_column($vitalsHistory, 'blood_sugar')) ?>;
-
-const chartDefaults = {
-  responsive: true,
-  plugins: { legend: { position: 'bottom', labels: { font: { family: 'DM Sans', size: 12 }, boxWidth: 12 } } },
-  scales: {
-    x: { grid: { color: '#f1f5f9' }, ticks: { font: { family: 'DM Sans', size: 11 } } },
-    y: { grid: { color: '#f1f5f9' }, ticks: { font: { family: 'DM Sans', size: 11 } } }
+    document.getElementById('modalBody').innerHTML = html;
+    document.getElementById('recordModal').classList.add('open');
   }
-};
 
-new Chart(document.getElementById('bpChart'), {
-  type: 'line',
-  data: {
-    labels,
-    datasets: [
-      { label: 'Systolic',  data: sysList, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,.08)',  tension: .4, fill: true, pointRadius: 4 },
-      { label: 'Diastolic', data: diaList, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.08)', tension: .4, fill: true, pointRadius: 4 },
-    ]
-  },
-  options: chartDefaults
-});
+  function closeRecordModal() {
+    document.getElementById('recordModal').classList.remove('open');
+  }
 
-new Chart(document.getElementById('sgChart'), {
-  type: 'line',
-  data: {
-    labels,
-    datasets: [
-      { label: 'Blood Sugar (mg/dL)', data: sgList, borderColor: '#0d9488', backgroundColor: 'rgba(13,148,136,.08)', tension: .4, fill: true, pointRadius: 4 },
-    ]
-  },
-  options: chartDefaults
-});
-<?php endif; ?>
+  function toggleSidebar() {
+    document.querySelector('.sidebar').classList.toggle('open');
+    document.getElementById('overlay').classList.toggle('open');
+  }
+
+  function closeSidebar() {
+    document.querySelector('.sidebar').classList.remove('open');
+    document.getElementById('overlay').classList.remove('open');
 </script>
 </body>
 </html>
