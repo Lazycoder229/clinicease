@@ -6,248 +6,235 @@ if (!isset($_SESSION['username'])) {
 }
 $first_name = htmlspecialchars($_SESSION['first_name'] ?? '');
 $last_name  = htmlspecialchars($_SESSION['last_name'] ?? '');
-$role     = htmlspecialchars($_SESSION['role'] ?? 'patient');
+$role       = htmlspecialchars($_SESSION['role'] ?? 'patient');
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full bg-slate-50">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ClinicEase — Dashboard</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="<?= url('public/css/dashboard.css') ?>">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="<?= url('public/css/output.css') ?>">
+  <style>
+    body { font-family: 'DM Sans', sans-serif; }
+  
+    .app-wrapper {
+      height: 100vh;
+      width: 100%;
+    }
+    .main-content {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    @media (min-width: 1024px) {
+      .main-content {
+        margin-left: 16rem; /* Match fixed sidebar width on desktop */
+      }
+    }
+  </style>
 </head>
-<body>
+<body class="h-full">
 
-<!-- ── Sidebar ── -->
-<?php include 'aside.php'; ?>
+<div class="app-wrapper">
+  <?php include 'aside.php'; ?>
 
-<!-- Mobile overlay -->
-<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+  <div class="overlay fixed inset-0 bg-slate-900/50 z-40 hidden lg:hidden" id="overlay" onclick="closeSidebar()"></div>
 
-<!-- ── Main ── -->
-<main class="main">
+  <main class="main-content lg:ml-64">
 
-  <!-- Topbar -->
- <?php include 'header.php'; ?>
+    <?php include 'header.php'; ?>
 
-  <!-- Content -->
-  <div class="content">
+    <div class="p-6 lg:p-10">
+      
+      
+      
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 lg:gap-8 mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
-    <!-- Stat Cards -->
-    <div class="stats-grid">
+          <div class="bg-white border border-slate-200 rounded-2xl p-6 flex items-start gap-4 shadow-sm hover:shadow-md transition-all">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center text-lg shrink-0" style="background:#ccfbf1;color:#0d9488;">
+              <i class="fa-solid fa-calendar-check"></i>
+            </div>
+            <div>
+              <div class="text-2xl font-bold text-slate-800">3</div>
+              <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Appointments</div>
+              <div class="text-[11px] font-bold mt-2 text-emerald-600 flex items-center gap-1">
+                <i class="fa-solid fa-arrow-up"></i> Next: Tomorrow
+              </div>
+            </div>
+          </div>
 
-      <div class="stat-card fade-up d1">
-        <div class="stat-icon" style="background:#ccfbf1;color:#0d9488;">
-          <i class="fa-solid fa-calendar-check"></i>
-        </div>
-        <div>
-          <div class="value">3</div>
-          <div class="label">Upcoming Appointments</div>
-          <div class="trend up"><i class="fa-solid fa-arrow-up"></i> Next: Tomorrow</div>
-        </div>
-      </div>
+          <div class="bg-white border border-slate-200 rounded-2xl p-6 flex items-start gap-4 shadow-sm hover:shadow-md transition-all">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center text-lg shrink-0" style="background:#fef3c7;color:#d97706;">
+              <i class="fa-solid fa-prescription-bottle-medical"></i>
+            </div>
+            <div>
+              <div class="text-2xl font-bold text-slate-800">5</div>
+              <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Prescriptions</div>
+              <div class="text-[11px] font-bold mt-2 text-emerald-600 flex items-center gap-1">
+                <i class="fa-solid fa-check"></i> All refilled
+              </div>
+            </div>
+          </div>
 
-      <div class="stat-card fade-up d2">
-        <div class="stat-icon" style="background:#fef3c7;color:#d97706;">
-          <i class="fa-solid fa-prescription-bottle-medical"></i>
-        </div>
-        <div>
-          <div class="value">5</div>
-          <div class="label">Active Prescriptions</div>
-          <div class="trend up"><i class="fa-solid fa-check"></i> All refilled</div>
-        </div>
-      </div>
+          <div class="bg-white border border-slate-200 rounded-2xl p-6 flex items-start gap-4 shadow-sm hover:shadow-md transition-all">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center text-lg shrink-0" style="background:#dbeafe;color:#3b82f6;">
+              <i class="fa-solid fa-flask"></i>
+            </div>
+            <div>
+              <div class="text-2xl font-bold text-slate-800">2</div>
+              <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Lab Results</div>
+              <div class="text-[11px] font-bold mt-2 text-red-600 flex items-center gap-1">
+                <i class="fa-solid fa-clock"></i> Pending
+              </div>
+            </div>
+          </div>
 
-      <div class="stat-card fade-up d3">
-        <div class="stat-icon" style="background:#dbeafe;color:#3b82f6;">
-          <i class="fa-solid fa-flask"></i>
-        </div>
-        <div>
-          <div class="value">2</div>
-          <div class="label">Pending Lab Results</div>
-          <div class="trend down"><i class="fa-solid fa-clock"></i> Awaiting review</div>
-        </div>
-      </div>
+          <div class="bg-white border border-slate-200 rounded-2xl p-6 flex items-start gap-4 shadow-sm hover:shadow-md transition-all">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center text-lg shrink-0" style="background:#f3e8ff;color:#a855f7;">
+              <i class="fa-solid fa-message"></i>
+            </div>
+            <div>
+              <div class="text-2xl font-bold text-slate-800">3</div>
+              <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Unread Mail</div>
+              <div class="text-[11px] font-bold mt-2 text-emerald-600 flex items-center gap-1">
+                <i class="fa-solid fa-envelope"></i> New message
+              </div>
+            </div>
+          </div>
 
-      <div class="stat-card fade-up d4">
-        <div class="stat-icon" style="background:#f3e8ff;color:#a855f7;">
-          <i class="fa-solid fa-message"></i>
-        </div>
-        <div>
-          <div class="value">3</div>
-          <div class="label">Unread Messages</div>
-          <div class="trend up"><i class="fa-solid fa-envelope"></i> From your care team</div>
-        </div>
-      </div>
-
-    </div>
-
-
-    <!-- Appointments + Health Metrics -->
-    <div class="row-2">
-
-      <!-- Upcoming Appointments -->
-      <div class="panel fade-up d3">
-        <div class="panel-header">
-          <h3><i class="fa-solid fa-calendar-check" style="color:var(--teal);margin-right:8px;"></i>Upcoming Appointments</h3>
-          <a href="appointments.php">View all</a>
         </div>
 
-        <div class="appt-item">
-          <div class="appt-dot" style="background:#ccfbf1;color:#0d9488;">
-            <i class="fa-solid fa-stethoscope"></i>
-          </div>
-          <div class="appt-info">
-            <div class="appt-title">General Check-up</div>
-            <div class="appt-sub"><i class="fa-regular fa-clock" style="margin-right:4px;"></i>Tomorrow · 9:00 AM · Dr. Santos</div>
-          </div>
-          <span class="appt-badge" style="background:#ccfbf1;color:#0d9488;">Confirmed</span>
-        </div>
+        <div class="h-8 lg:h-12"></div>
 
-        <div class="appt-item">
-          <div class="appt-dot" style="background:#fef3c7;color:#d97706;">
-            <i class="fa-solid fa-tooth"></i>
-          </div>
-          <div class="appt-info">
-            <div class="appt-title">Dental Cleaning</div>
-            <div class="appt-sub"><i class="fa-regular fa-clock" style="margin-right:4px;"></i>Feb 25 · 2:00 PM · Dr. Reyes</div>
-          </div>
-          <span class="appt-badge" style="background:#fef3c7;color:#d97706;">Pending</span>
-        </div>
+        <div class="w-full grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-stretch animate-in fade-in slide-in-from-bottom-6 duration-700">
 
-        <div class="appt-item">
-          <div class="appt-dot" style="background:#dbeafe;color:#3b82f6;">
-            <i class="fa-solid fa-eye"></i>
+          <div class="lg:col-span-1">
+            <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden h-full">
+              <div class="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                  <i class="fa-solid fa-calendar-day text-teal-600"></i> Upcoming Appointments
+                </h3>
+                <a href="appointments.php" class="text-xs font-bold text-teal-600 hover:underline">View all</a>
+              </div>
+              <div class="p-6 divide-y divide-slate-100">
+                <div class="py-4 first:pt-0 last:pb-0 flex items-center gap-4">
+                  <div class="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+                    <i class="fa-solid fa-stethoscope"></i>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm font-bold text-slate-800">General Check-up</p>
+                    <p class="text-xs text-slate-500 mt-0.5">Tomorrow · 9:00 AM · Dr. Santos</p>
+                  </div>
+                  <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-teal-50 text-teal-600 uppercase">Confirmed</span>
+                </div>
+                <div class="py-4 last:pb-0 flex items-center gap-4">
+                  <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                    <i class="fa-solid fa-tooth"></i>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm font-bold text-slate-800">Dental Cleaning</p>
+                    <p class="text-xs text-slate-500 mt-0.5">Feb 25 · 2:00 PM · Dr. Reyes</p>
+                  </div>
+                  <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-600 uppercase">Pending</span>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="appt-info">
-            <div class="appt-title">Eye Examination</div>
-            <div class="appt-sub"><i class="fa-regular fa-clock" style="margin-right:4px;"></i>Mar 3 · 10:30 AM · Dr. Lim</div>
-          </div>
-          <span class="appt-badge" style="background:#dbeafe;color:#3b82f6;">Scheduled</span>
-        </div>
-      </div>
 
-      <!-- Health Metrics -->
-      <div class="panel fade-up d4">
-        <div class="panel-header">
-          <h3><i class="fa-solid fa-heart-pulse" style="color:#ef4444;margin-right:8px;"></i>Health Metrics</h3>
-          <a href="records.php">Details</a>
-        </div>
+          <div class="lg:col-span-1">
+            <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden h-full">
+              <div class="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                  <i class="fa-solid fa-heart-pulse text-red-500"></i> Health Metrics
+                </h3>
+                <a href="records.php" class="text-xs font-bold text-teal-600 hover:underline">Details</a>
+              </div>
+              <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
+                <div class="flex items-center justify-between group">
+                  <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-lg bg-red-50 text-red-500 flex items-center justify-center shrink-0">
+                      <i class="fa-solid fa-heart-pulse text-sm"></i>
+                    </div>
+                    <div>
+                      <p class="text-[11px] font-medium text-slate-500 uppercase tracking-tight">Blood Pressure</p>
+                      <p class="text-sm font-bold text-slate-800">120 / 80 <span class="font-normal text-slate-400">mmHg</span></p>
+                    </div>
+                  </div>
+                  <div class="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div class="h-full bg-red-500" style="width: 60%"></div>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between group">
+                  <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+                      <i class="fa-solid fa-droplet text-sm"></i>
+                    </div>
+                    <div>
+                      <p class="text-[11px] font-medium text-slate-500 uppercase tracking-tight">Blood Sugar</p>
+                      <p class="text-sm font-bold text-slate-800">98 <span class="font-normal text-slate-400">mg/dL</span></p>
+                    </div>
+                  </div>
+                  <div class="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div class="h-full bg-teal-600" style="width: 45%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
 
-        <div class="metric-row">
-          <div class="metric-icon" style="background:#fee2e2;color:#ef4444;">
-            <i class="fa-solid fa-heart-pulse"></i>
+          <div class="lg:col-span-1">
+            <div class="bg-white border border-slate-200 rounded-2xl shadow-sm h-full overflow-hidden">
+              <div class="p-6 border-b border-slate-100 bg-slate-50/50">
+                <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                  <i class="fa-solid fa-history text-blue-500"></i> Recent Activity
+                </h3>
+              </div>
+              <div class="p-6 space-y-6">
+                <?php
+                $activities = [
+                  ['icon'=>'fa-file-medical', 'color'=>'#0d9488','bg'=>'#ccfbf1', 'text'=>'Lab results uploaded', 'sub'=>'Feb 18 · Blood Panel'],
+                  ['icon'=>'fa-prescription', 'color'=>'#d97706','bg'=>'#fef3c7', 'text'=>'Prescription renewed', 'sub'=>'Feb 15 · Dr. Santos'],
+                  ['icon'=>'fa-calendar-xmark', 'color'=>'#ef4444','bg'=>'#fee2e2', 'text'=>'Rescheduled', 'sub'=>'Feb 12 · Cardiology'],
+                ];
+                foreach ($activities as $a):
+                ?>
+                <div class="flex items-start gap-4">
+                  <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style="background:<?= $a['bg'] ?>;color:<?= $a['color'] ?>;">
+                    <i class="fa-solid <?= $a['icon'] ?> text-xs"></i>
+                  </div>
+                  <div class="min-w-0">
+                    <p class="text-sm font-bold text-slate-800 truncate"><?= $a['text'] ?></p>
+                    <p class="text-[11px] text-slate-500 mt-0.5"><?= $a['sub'] ?></p>
+                  </div>
+                </div>
+                <?php endforeach; ?>
+              </div>
+            </div>
           </div>
-          <div>
-            <div class="m-label">Blood Pressure</div>
-            <div class="m-value">120 / 80 mmHg</div>
-          </div>
-          <div class="m-bar-wrap">
-            <div class="m-bar" style="width:60%;background:#ef4444;"></div>
-          </div>
-        </div>
 
-        <div class="metric-row">
-          <div class="metric-icon" style="background:#ccfbf1;color:#0d9488;">
-            <i class="fa-solid fa-droplet"></i>
-          </div>
-          <div>
-            <div class="m-label">Blood Sugar</div>
-            <div class="m-value">98 mg/dL</div>
-          </div>
-          <div class="m-bar-wrap">
-            <div class="m-bar" style="width:45%;background:#0d9488;"></div>
-          </div>
         </div>
-
-        <div class="metric-row">
-          <div class="metric-icon" style="background:#fef3c7;color:#d97706;">
-            <i class="fa-solid fa-weight-scale"></i>
-          </div>
-          <div>
-            <div class="m-label">BMI</div>
-            <div class="m-value">22.4 (Normal)</div>
-          </div>
-          <div class="m-bar-wrap">
-            <div class="m-bar" style="width:55%;background:#d97706;"></div>
-          </div>
-        </div>
-
-        <div class="metric-row">
-          <div class="metric-icon" style="background:#dbeafe;color:#3b82f6;">
-            <i class="fa-solid fa-lungs"></i>
-          </div>
-          <div>
-            <div class="m-label">Oxygen Saturation</div>
-            <div class="m-value">98%</div>
-          </div>
-          <div class="m-bar-wrap">
-            <div class="m-bar" style="width:98%;background:#3b82f6;"></div>
-          </div>
-        </div>
-
-        <div class="metric-row">
-          <div class="metric-icon" style="background:#f3e8ff;color:#a855f7;">
-            <i class="fa-solid fa-temperature-half"></i>
-          </div>
-          <div>
-            <div class="m-label">Temperature</div>
-            <div class="m-value">36.6 °C</div>
-          </div>
-          <div class="m-bar-wrap">
-            <div class="m-bar" style="width:50%;background:#a855f7;"></div>
-          </div>
-        </div>
-
       </div>
     </div>
-
-    <!-- Recent Activity -->
-    <div class="panel fade-up d5">
-      <div class="panel-header">
-        <h3><i class="fa-solid fa-clock-rotate-left" style="color:var(--teal);margin-right:8px;"></i>Recent Activity</h3>
-        <a href="records.php">View all</a>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:0;">
-
-        <?php
-        $activities = [
-          ['icon'=>'fa-file-medical',        'color'=>'#0d9488','bg'=>'#ccfbf1', 'text'=>'Lab results uploaded',              'sub'=>'Feb 18, 2026 · Blood Panel'],
-          ['icon'=>'fa-prescription',        'color'=>'#d97706','bg'=>'#fef3c7', 'text'=>'Prescription renewed',               'sub'=>'Feb 15, 2026 · Dr. Santos'],
-          ['icon'=>'fa-calendar-xmark',      'color'=>'#ef4444','bg'=>'#fee2e2', 'text'=>'Appointment rescheduled',           'sub'=>'Feb 12, 2026 · Cardiology'],
-          ['icon'=>'fa-comment-medical',     'color'=>'#3b82f6','bg'=>'#dbeafe', 'text'=>'Message from Dr. Reyes',            'sub'=>'Feb 10, 2026 · Follow-up note'],
-          ['icon'=>'fa-syringe',             'color'=>'#a855f7','bg'=>'#f3e8ff', 'text'=>'Vaccination recorded',              'sub'=>'Feb 5, 2026 · Flu Shot'],
-        ];
-        foreach ($activities as $a):
-        ?>
-        <div class="appt-item">
-          <div class="appt-dot" style="background:<?= $a['bg'] ?>;color:<?= $a['color'] ?>;">
-            <i class="fa-solid <?= $a['icon'] ?>"></i>
-          </div>
-          <div class="appt-info">
-            <div class="appt-title"><?= $a['text'] ?></div>
-            <div class="appt-sub"><?= $a['sub'] ?></div>
-          </div>
-        </div>
-        <?php endforeach; ?>
-
-      </div>
-    </div>
-
-  </div><!-- /content -->
-</main>
+  </main>
+</div>
 
 <script>
   function toggleSidebar() {
-    document.getElementById('sidebar').classList.toggle('open');
-    document.getElementById('overlay').classList.toggle('open');
+    // Assuming your sidebar has an ID of 'sidebar' in aside.php
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
+    sidebar.classList.toggle('-translate-x-full'); // Tailwind standard for sidebars
+    overlay.classList.toggle('hidden');
   }
   function closeSidebar() {
-    document.getElementById('sidebar').classList.remove('open');
-    document.getElementById('overlay').classList.remove('open');
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
+    sidebar.classList.add('-translate-x-full');
+    overlay.classList.add('hidden');
   }
 </script>
 </body>

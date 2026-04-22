@@ -1,36 +1,23 @@
 <?php
-// Session already started in helpers.php
 if (!isset($_SESSION['user_id'])) {
     header('Location: ../index.php');
     exit;
 }
 
 $userId = (int) $_SESSION['user_id'];
-
-/* ─── Database connection ─── */
 $db = new Database();
 
-/* ─── Resolve patient_id ─── */
 $patientRow = $db->table('patients')->where('user_id', $userId)->get();
 if (!$patientRow) die('Patient record not found.');
 $patientId = (int) $patientRow['patient_id'];
 
-/* ─── Current user display info ─── */
 $currentUser = $db->table('users u')
     ->select('u.username, u.role, p.first_name, p.last_name, CONCAT(p.first_name, \' \', p.last_name) AS full_name')
     ->inner_join('user_profiles p', 'u.user_id = p.user_id')
     ->where('u.user_id', $userId)
     ->get();
-$first_name = htmlspecialchars($currentUser['first_name'] ?? '');
-$last_name  = htmlspecialchars($currentUser['last_name'] ?? '');
-$full_name  = htmlspecialchars($currentUser['full_name'] ?? '');
-$role       = htmlspecialchars($currentUser['role'] ?? 'patient');
+$full_name = htmlspecialchars($currentUser['full_name'] ?? '');
 
-/* ═══════════════════════════════════════════════════════════
-   GET — Fetch health records and metrics
-════════════════════════════════════════════════════════════ */
-
-/* ─── Fetch all health records (lab results) ─── */
 $labRecords = $db->table('health_records hr')
     ->select('hr.record_id, hr.record_date, hr.visit_type, hr.chief_complaint, hr.diagnosis, hr.treatment, hr.prescription, hr.doctor_notes, hr.blood_pressure, hr.heart_rate, hr.temperature, hr.oxygen_saturation, hr.weight_kg, hr.height_cm, hr.bmi, hr.lab_results, hr.status, CONCAT(dp.first_name, \' \', dp.last_name) AS doctor_name')
     ->inner_join('doctors d', 'hr.doctor_id = d.doctor_id', 'INNER ')
@@ -39,7 +26,6 @@ $labRecords = $db->table('health_records hr')
     ->order_by('hr.record_date', 'DESC')
     ->get_all();
 
-/* ─── Fetch latest health metrics (vital signs) ─── */
 $latestMetrics = $db->table('health_metrics hm')
     ->select('hm.metric_id, hm.recorded_at, hm.recorded_by, hm.blood_pressure_sys, hm.blood_pressure_dia, hm.heart_rate, hm.temperature, hm.oxygen_saturation, hm.blood_sugar, hm.weight_kg, hm.height_cm, hm.bmi, hm.notes')
     ->where('hm.patient_id', $patientId)
@@ -47,532 +33,314 @@ $latestMetrics = $db->table('health_metrics hm')
     ->limit(20)
     ->get_all();
 
-/* ─── Summary counts ─── */
-$totalRecords = count($labRecords);
-$pendingCount = 0;
+$totalRecords   = count($labRecords);
+$pendingCount   = 0;
 $completedCount = 0;
-foreach ($labRecords as $record) {
-    if ($record['status'] === 'Draft') $pendingCount++;
+foreach ($labRecords as $r) {
+    if ($r['status'] === 'Draft') $pendingCount++;
     else $completedCount++;
 }
-
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full bg-slate-50">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ClinicEase — Lab Results</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="<?= url('public/css/dashboard.css') ?>">
+  <link rel="stylesheet" href="<?= url('public/css/output.css') ?>">
   <style>
-    .lab-card {
-      border-radius: 12px;
-      border: 1px solid #e5e7eb;
-      padding: 16px;
-      margin-bottom: 12px;
-      transition: all 0.3s ease;
-      cursor: pointer;
-    }
-    .lab-card:hover {
-      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-      border-color: #d1d5db;
-    }
-    .lab-card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: start;
-      margin-bottom: 12px;
-    }
-    .lab-card-title {
-      font-weight: 600;
-      font-size: 15px;
-      color: #1f2937;
-    }
-    .lab-card-date {
-      font-size: 13px;
-      color: #6b7280;
-      margin-top: 4px;
-    }
-    .lab-card-doctor {
-      font-size: 13px;
-      color: #6b7280;
-      margin-top: 2px;
-    }
-    .lab-badge {
-      display: inline-block;
-      padding: 4px 10px;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: 600;
-    }
-    .badge-draft {
-      background: #fef3c7;
-      color: #d97706;
-    }
-    .badge-final {
-      background: #ccfbf1;
-      color: #0d9488;
-    }
-    .badge-archived {
-      background: #f1f5f9;
-      color: #64748b;
-    }
-    .lab-values {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 12px;
-      margin-top: 12px;
-      padding-top: 12px;
-      border-top: 1px solid #f3f4f6;
-    }
-    .lab-value-box {
-      padding: 10px;
-      background: #f9fafb;
-      border-radius: 8px;
-      text-align: center;
-    }
-    .lab-value-label {
-      font-size: 12px;
-      color: #6b7280;
-      margin-bottom: 4px;
-    }
-    .lab-value-text {
-      font-weight: 600;
-      font-size: 14px;
-      color: #1f2937;
-    }
-    .lab-detail-toggle {
-      font-size: 13px;
-      color: #3b82f6;
-      cursor: pointer;
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 1px solid #f3f4f6;
-    }
-    .lab-detail-toggle:hover {
-      text-decoration: underline;
-    }
-    .lab-detail-content {
-      display: none;
-      margin-top: 12px;
-      padding: 12px;
-      background: #f9fafb;
-      border-radius: 8px;
-      font-size: 13px;
-      color: #4b5563;
-      line-height: 1.6;
-    }
-    .lab-detail-content.open {
-      display: block;
-    }
-    .metric-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 10px 0;
-      border-bottom: 1px solid #e5e7eb;
-    }
-    .metric-item:last-child {
-      border-bottom: none;
-    }
-    .metric-label {
-      font-size: 13px;
-      color: #6b7280;
-      font-weight: 500;
-    }
-    .metric-value {
-      font-weight: 600;
-      color: #1f2937;
-    }
-    .filter-tabs {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 20px;
-      border-bottom: 2px solid #e5e7eb;
-      overflow-x: auto;
-    }
-    .filter-tab {
-      padding: 12px 16px;
-      border: none;
-      background: none;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-      color: #6b7280;
-      border-bottom: 2px solid transparent;
-      margin-bottom: -2px;
-      transition: all 0.3s ease;
-    }
-    .filter-tab.active {
-      color: #0d9488;
-      border-bottom-color: #0d9488;
-    }
-    .filter-tab:hover {
-      color: #374151;
-    }
+    body { font-family: 'DM Sans', sans-serif; }
+    .main-content { min-width: 0; display: flex; flex-direction: column; min-height: 100vh; }
+    @media (min-width: 1024px) { .main-content { margin-left: 16rem; } }
+    .detail-content { display: none; }
+    .detail-content.open { display: block; }
+    .chevron-icon { transition: transform .3s ease; }
+    .filter-tab.active { color: #0d9488; border-bottom-color: #0d9488; }
   </style>
 </head>
-<body>
+<body class="bg-slate-50 h-full">
 
-<!-- ── Sidebar ── -->
 <?php include 'aside.php'; ?>
+<div class="overlay fixed inset-0 bg-slate-900/50 z-40 hidden lg:hidden" id="overlay" onclick="closeSidebar()"></div>
 
-<!-- Mobile overlay -->
-<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
-
-<!-- ── Main ── -->
-<main class="main">
-
-  <!-- Topbar -->
+<main class="main-content lg:ml-64">
   <?php include 'header.php'; ?>
 
-  <!-- Content -->
-  <div class="content">
+  <div class="p-6 space-y-6">
 
     <!-- Stat Cards -->
-    <div class="stats-grid">
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
 
-      <div class="stat-card fade-up d1">
-        <div class="stat-icon" style="background:#dbeafe;color:#3b82f6;">
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 flex items-start gap-4 shadow-sm hover:shadow-md transition-all">
+        <div class="w-11 h-11 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
           <i class="fa-solid fa-flask"></i>
         </div>
         <div>
-          <div class="value"><?= $totalRecords ?></div>
-          <div class="label">Total Records</div>
-          <div class="trend up"><i class="fa-solid fa-file-medical"></i> All lab results</div>
+          <div class="text-2xl font-bold text-slate-800"><?= $totalRecords ?></div>
+          <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Records</div>
+          <div class="text-[11px] font-bold mt-1.5 text-blue-600 flex items-center gap-1">
+            <i class="fa-solid fa-file-medical"></i> All lab results
+          </div>
         </div>
       </div>
 
-      <div class="stat-card fade-up d2">
-        <div class="stat-icon" style="background:#fef3c7;color:#d97706;">
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 flex items-start gap-4 shadow-sm hover:shadow-md transition-all">
+        <div class="w-11 h-11 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
           <i class="fa-solid fa-hourglass-end"></i>
         </div>
         <div>
-          <div class="value"><?= $pendingCount ?></div>
-          <div class="label">Pending Results</div>
-          <div class="trend down"><i class="fa-solid fa-clock"></i> Awaiting review</div>
+          <div class="text-2xl font-bold text-slate-800"><?= $pendingCount ?></div>
+          <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Pending</div>
+          <div class="text-[11px] font-bold mt-1.5 text-amber-600 flex items-center gap-1">
+            <i class="fa-solid fa-clock"></i> Awaiting review
+          </div>
         </div>
       </div>
 
-      <div class="stat-card fade-up d3">
-        <div class="stat-icon" style="background:#ccfbf1;color:#0d9488;">
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 flex items-start gap-4 shadow-sm hover:shadow-md transition-all">
+        <div class="w-11 h-11 rounded-xl bg-teal-100 text-teal-600 flex items-center justify-center shrink-0">
           <i class="fa-solid fa-circle-check"></i>
         </div>
         <div>
-          <div class="value"><?= $completedCount ?></div>
-          <div class="label">Completed</div>
-          <div class="trend up"><i class="fa-solid fa-check"></i> Ready to view</div>
+          <div class="text-2xl font-bold text-slate-800"><?= $completedCount ?></div>
+          <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Completed</div>
+          <div class="text-[11px] font-bold mt-1.5 text-teal-600 flex items-center gap-1">
+            <i class="fa-solid fa-check"></i> Ready to view
+          </div>
         </div>
       </div>
 
-      <div class="stat-card fade-up d4">
-        <div class="stat-icon" style="background:#f3e8ff;color:#a855f7;">
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 flex items-start gap-4 shadow-sm hover:shadow-md transition-all">
+        <div class="w-11 h-11 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
           <i class="fa-solid fa-heart-pulse"></i>
         </div>
         <div>
-          <div class="value"><?= count($latestMetrics) ?></div>
-          <div class="label">Latest Metrics</div>
-          <div class="trend up"><i class="fa-solid fa-arrow-up"></i> Vitals tracked</div>
+          <div class="text-2xl font-bold text-slate-800"><?= count($latestMetrics) ?></div>
+          <div class="text-xs font-medium text-slate-500 uppercase tracking-wider">Latest Metrics</div>
+          <div class="text-[11px] font-bold mt-1.5 text-purple-600 flex items-center gap-1">
+            <i class="fa-solid fa-arrow-up"></i> Vitals tracked
+          </div>
         </div>
       </div>
 
     </div>
 
     <!-- Filter Tabs -->
-    <div class="filter-tabs">
-      <button class="filter-tab active" onclick="filterRecords('all')">
-        <i class="fa-solid fa-list"></i> All Results
+    <div class="flex gap-0 border-b-2 border-slate-200 overflow-x-auto">
+      <button class="filter-tab px-4 py-3 border-b-2 border-transparent text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors active"
+              onclick="filterRecords('all', this)">
+        <i class="fa-solid fa-list mr-1.5"></i> All Results
       </button>
-      <button class="filter-tab" onclick="filterRecords('final')">
-        <i class="fa-solid fa-circle-check"></i> Completed
+      <button class="filter-tab px-4 py-3 border-b-2 border-transparent text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+              onclick="filterRecords('final', this)">
+        <i class="fa-solid fa-circle-check mr-1.5"></i> Completed
       </button>
-      <button class="filter-tab" onclick="filterRecords('draft')">
-        <i class="fa-solid fa-hourglass-end"></i> Pending
-      </button>
-      <button class="filter-tab" onclick="filterRecords('vitals')">
-        <i class="fa-solid fa-heart-pulse"></i> Vitals
+      <button class="filter-tab px-4 py-3 border-b-2 border-transparent text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+              onclick="filterRecords('draft', this)">
+        <i class="fa-solid fa-hourglass-end mr-1.5"></i> Pending
       </button>
     </div>
 
-    <!-- Lab Records Section -->
-    <div class="panel fade-up d3">
-      <div class="panel-header">
-        <h3><i class="fa-solid fa-flask" style="color:#3b82f6;margin-right:8px;"></i>Lab Results & Health Records</h3>
-        <span style="font-size:13px;color:#6b7280;"><?= $totalRecords ?> records</span>
+    <!-- Lab Records -->
+    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
+      <div class="flex items-center justify-between mb-5">
+        <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-flask text-blue-500"></i> Lab Results & Health Records
+        </h3>
+        <span class="text-xs text-slate-500"><?= $totalRecords ?> records</span>
       </div>
 
       <?php if (empty($labRecords)): ?>
-        <div style="text-align:center;padding:40px 20px;color:#9ca3af;">
-          <i class="fa-solid fa-inbox" style="font-size:32px;margin-bottom:12px;opacity:0.5;"></i>
-          <p>No lab results or health records available yet.</p>
-          <p style="font-size:13px;margin-top:8px;">Once you have completed visits and lab work, they will appear here.</p>
+        <div class="flex flex-col items-center justify-center py-16 text-slate-400">
+          <i class="fa-solid fa-inbox text-4xl mb-3 opacity-50"></i>
+          <p class="text-sm">No lab results or health records available yet.</p>
+          <p class="text-xs mt-1 text-slate-400">Once you have completed visits and lab work, they will appear here.</p>
         </div>
       <?php else: ?>
-        <!-- Lab Records List -->
-        <div id="records-container">
-          <?php foreach ($labRecords as $record): 
-            $statusClass = $record['status'] === 'Draft' ? 'badge-draft' : ($record['status'] === 'Archived' ? 'badge-archived' : 'badge-final');
-            $recordDate = date('F j, Y', strtotime($record['record_date']));
-            $recordTime = date('g:i A', strtotime($record['record_date']));
+        <div id="records-container" class="space-y-3">
+          <?php foreach ($labRecords as $record):
+            $statusBadge = match($record['status']) {
+              'Draft'    => 'bg-amber-100 text-amber-700',
+              'Archived' => 'bg-slate-100 text-slate-600',
+              default    => 'bg-teal-100 text-teal-700',
+            };
           ?>
-          <div class="lab-card" data-status="<?= strtolower($record['status']) ?>" data-type="record">
-            <div class="lab-card-header">
+          <div class="lab-card border border-slate-100 rounded-xl p-4 hover:border-slate-200 hover:bg-slate-50 transition-all"
+               data-status="<?= strtolower($record['status']) ?>">
+
+            <!-- Header -->
+            <div class="flex items-start justify-between gap-3 mb-3">
               <div>
-                <div class="lab-card-title">
-                  <i class="fa-solid fa-file-medical" style="margin-right:8px;color:#3b82f6;"></i>
+                <p class="text-sm font-bold text-slate-800">
+                  <i class="fa-solid fa-file-medical text-blue-500 mr-1.5"></i>
                   <?= htmlspecialchars($record['visit_type']) ?>
-                </div>
-                <div class="lab-card-date"><?= $recordDate ?> · <?= $recordTime ?></div>
-                <div class="lab-card-doctor"><i class="fa-solid fa-user-md" style="margin-right:4px;"></i><?= htmlspecialchars($record['doctor_name']) ?></div>
+                </p>
+                <p class="text-xs text-slate-500 mt-0.5">
+                  <?= date('F j, Y', strtotime($record['record_date'])) ?>
+                </p>
+                <p class="text-xs text-slate-500">
+                  <i class="fa-solid fa-user-md mr-1"></i><?= htmlspecialchars($record['doctor_name']) ?>
+                </p>
               </div>
-              <span class="lab-badge <?= $statusClass ?>"><?= htmlspecialchars($record['status']) ?></span>
+              <span class="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide shrink-0 <?= $statusBadge ?>">
+                <?= htmlspecialchars($record['status']) ?>
+              </span>
             </div>
 
-            <!-- Vital Signs Display -->
-            <?php if ($record['blood_pressure'] || $record['heart_rate'] || $record['temperature']): ?>
-            <div class="lab-values">
+            <!-- Vitals Grid -->
+            <?php if ($record['blood_pressure'] || $record['heart_rate'] || $record['temperature'] || $record['oxygen_saturation'] || $record['weight_kg'] || $record['height_cm'] || $record['bmi']): ?>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 pt-3 border-t border-slate-100">
               <?php if ($record['blood_pressure']): ?>
-              <div class="lab-value-box">
-                <div class="lab-value-label">Blood Pressure</div>
-                <div class="lab-value-text"><?= htmlspecialchars($record['blood_pressure']) ?></div>
+              <div class="p-2 bg-slate-50 rounded-lg text-center">
+                <div class="text-xs text-slate-400 mb-0.5">Blood Pressure</div>
+                <div class="text-sm font-semibold text-slate-800"><?= htmlspecialchars($record['blood_pressure']) ?></div>
               </div>
               <?php endif; ?>
-
               <?php if ($record['heart_rate']): ?>
-              <div class="lab-value-box">
-                <div class="lab-value-label">Heart Rate</div>
-                <div class="lab-value-text"><?= (int)$record['heart_rate'] ?> bpm</div>
+              <div class="p-2 bg-slate-50 rounded-lg text-center">
+                <div class="text-xs text-slate-400 mb-0.5">Heart Rate</div>
+                <div class="text-sm font-semibold text-slate-800"><?= (int)$record['heart_rate'] ?> bpm</div>
               </div>
               <?php endif; ?>
-
               <?php if ($record['temperature']): ?>
-              <div class="lab-value-box">
-                <div class="lab-value-label">Temperature</div>
-                <div class="lab-value-text"><?= (float)$record['temperature'] ?>°C</div>
+              <div class="p-2 bg-slate-50 rounded-lg text-center">
+                <div class="text-xs text-slate-400 mb-0.5">Temperature</div>
+                <div class="text-sm font-semibold text-slate-800"><?= (float)$record['temperature'] ?>°C</div>
               </div>
               <?php endif; ?>
-
               <?php if ($record['oxygen_saturation']): ?>
-              <div class="lab-value-box">
-                <div class="lab-value-label">Oxygen Saturation</div>
-                <div class="lab-value-text"><?= (int)$record['oxygen_saturation'] ?>%</div>
+              <div class="p-2 bg-slate-50 rounded-lg text-center">
+                <div class="text-xs text-slate-400 mb-0.5">O₂ Sat.</div>
+                <div class="text-sm font-semibold text-slate-800"><?= (int)$record['oxygen_saturation'] ?>%</div>
               </div>
               <?php endif; ?>
-
               <?php if ($record['weight_kg']): ?>
-              <div class="lab-value-box">
-                <div class="lab-value-label">Weight</div>
-                <div class="lab-value-text"><?= (float)$record['weight_kg'] ?> kg</div>
+              <div class="p-2 bg-slate-50 rounded-lg text-center">
+                <div class="text-xs text-slate-400 mb-0.5">Weight</div>
+                <div class="text-sm font-semibold text-slate-800"><?= (float)$record['weight_kg'] ?> kg</div>
               </div>
               <?php endif; ?>
-
               <?php if ($record['height_cm']): ?>
-              <div class="lab-value-box">
-                <div class="lab-value-label">Height</div>
-                <div class="lab-value-text"><?= (float)$record['height_cm'] ?> cm</div>
+              <div class="p-2 bg-slate-50 rounded-lg text-center">
+                <div class="text-xs text-slate-400 mb-0.5">Height</div>
+                <div class="text-sm font-semibold text-slate-800"><?= (float)$record['height_cm'] ?> cm</div>
               </div>
               <?php endif; ?>
-
               <?php if ($record['bmi']): ?>
-              <div class="lab-value-box">
-                <div class="lab-value-label">BMI</div>
-                <div class="lab-value-text"><?= (float)$record['bmi'] ?></div>
+              <div class="p-2 bg-slate-50 rounded-lg text-center">
+                <div class="text-xs text-slate-400 mb-0.5">BMI</div>
+                <div class="text-sm font-semibold text-slate-800"><?= (float)$record['bmi'] ?></div>
               </div>
               <?php endif; ?>
             </div>
             <?php endif; ?>
 
-            <!-- View Details Toggle -->
-            <div class="lab-detail-toggle" onclick="toggleDetail(this)">
-              <i class="fa-solid fa-chevron-down" style="margin-right:4px;"></i> View Clinical Details
-            </div>
+            <!-- Toggle Details -->
+            <button class="flex items-center gap-1.5 text-xs text-blue-500 hover:text-blue-700 font-medium mt-3 pt-3 border-t border-slate-100 w-full transition-colors"
+                    onclick="toggleDetail(this)">
+              <i class="fa-solid fa-chevron-down chevron-icon text-xs"></i> View Clinical Details
+            </button>
 
-            <!-- Hidden Details -->
-            <div class="lab-detail-content">
+            <div class="detail-content mt-3 p-3 bg-slate-50 rounded-xl text-sm text-slate-600 leading-relaxed space-y-3">
               <?php if ($record['chief_complaint']): ?>
-              <div style="margin-bottom:12px;">
-                <strong style="color:#1f2937;">Chief Complaint:</strong><br>
-                <?= nl2br(htmlspecialchars($record['chief_complaint'])) ?>
-              </div>
+              <div><strong class="text-slate-800">Chief Complaint:</strong><br><?= nl2br(htmlspecialchars($record['chief_complaint'])) ?></div>
               <?php endif; ?>
-
               <?php if ($record['diagnosis']): ?>
-              <div style="margin-bottom:12px;">
-                <strong style="color:#1f2937;">Diagnosis:</strong><br>
-                <?= nl2br(htmlspecialchars($record['diagnosis'])) ?>
-              </div>
+              <div><strong class="text-slate-800">Diagnosis:</strong><br><?= nl2br(htmlspecialchars($record['diagnosis'])) ?></div>
               <?php endif; ?>
-
               <?php if ($record['treatment']): ?>
-              <div style="margin-bottom:12px;">
-                <strong style="color:#1f2937;">Treatment:</strong><br>
-                <?= nl2br(htmlspecialchars($record['treatment'])) ?>
-              </div>
+              <div><strong class="text-slate-800">Treatment:</strong><br><?= nl2br(htmlspecialchars($record['treatment'])) ?></div>
               <?php endif; ?>
-
               <?php if ($record['lab_results']): ?>
-              <div style="margin-bottom:12px;">
-                <strong style="color:#1f2937;">Lab Results:</strong><br>
-                <?= nl2br(htmlspecialchars($record['lab_results'])) ?>
-              </div>
+              <div><strong class="text-slate-800">Lab Results:</strong><br><?= nl2br(htmlspecialchars($record['lab_results'])) ?></div>
               <?php endif; ?>
-
               <?php if ($record['doctor_notes']): ?>
-              <div>
-                <strong style="color:#1f2937;">Doctor's Notes:</strong><br>
-                <?= nl2br(htmlspecialchars($record['doctor_notes'])) ?>
-              </div>
+              <div><strong class="text-slate-800">Doctor's Notes:</strong><br><?= nl2br(htmlspecialchars($record['doctor_notes'])) ?></div>
               <?php endif; ?>
             </div>
+
           </div>
           <?php endforeach; ?>
         </div>
-
       <?php endif; ?>
     </div>
 
-    <!-- Latest Vital Signs Section -->
-    <?php if (!empty($latestMetrics)): ?>
-    <div class="panel fade-up d4">
-      <div class="panel-header">
-        <h3><i class="fa-solid fa-heart-pulse" style="color:#ef4444;margin-right:8px;"></i>Latest Vital Signs</h3>
-        <span style="font-size:13px;color:#6b7280;">Most recent entries</span>
+    <!-- Latest Vital Signs -->
+    <?php if (!empty($latestMetrics)):
+      $latest = $latestMetrics[0];
+      $vitalCards = [];
+      if ($latest['blood_pressure_sys'] && $latest['blood_pressure_dia'])
+        $vitalCards[] = ['label'=>'Blood Pressure','value'=>(int)$latest['blood_pressure_sys'].'/'.(int)$latest['blood_pressure_dia'],'unit'=>'mmHg','classes'=>'bg-red-50 border-red-300 text-red-800'];
+      if ($latest['heart_rate'])
+        $vitalCards[] = ['label'=>'Heart Rate','value'=>(int)$latest['heart_rate'],'unit'=>'bpm','classes'=>'bg-red-50 border-red-200 text-red-700'];
+      if ($latest['temperature'])
+        $vitalCards[] = ['label'=>'Temperature','value'=>(float)$latest['temperature'],'unit'=>'°C','classes'=>'bg-orange-50 border-orange-200 text-orange-700'];
+      if ($latest['oxygen_saturation'])
+        $vitalCards[] = ['label'=>'Oxygen Sat.','value'=>(int)$latest['oxygen_saturation'],'unit'=>'%','classes'=>'bg-blue-50 border-blue-200 text-blue-800'];
+      if ($latest['blood_sugar'])
+        $vitalCards[] = ['label'=>'Blood Sugar','value'=>(float)$latest['blood_sugar'],'unit'=>'mg/dL','classes'=>'bg-emerald-50 border-emerald-200 text-emerald-800'];
+      if ($latest['bmi'])
+        $vitalCards[] = ['label'=>'BMI','value'=>(float)$latest['bmi'],'unit'=>'kg/m²','classes'=>'bg-purple-50 border-purple-200 text-purple-800'];
+    ?>
+    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-heart-pulse text-red-500"></i> Latest Vital Signs
+        </h3>
+        <span class="text-xs text-slate-500">Most recent entries</span>
       </div>
 
-      <?php $latest = $latestMetrics[0]; ?>
-      
-      <div style="margin-bottom:20px;padding:12px;background:#f9fafb;border-radius:8px;font-size:13px;color:#6b7280;">
-        <strong style="color:#1f2937;">Last recorded:</strong> 
+      <p class="text-xs text-slate-500 mb-4 px-3 py-2 bg-slate-50 rounded-lg">
+        <strong class="text-slate-700">Last recorded:</strong>
         <?= date('F j, Y \a\t g:i A', strtotime($latest['recorded_at'])) ?>
-      </div>
+      </p>
 
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;">
-        <?php if ($latest['blood_pressure_sys'] && $latest['blood_pressure_dia']): ?>
-        <div style="padding:16px;background:#fee2e2;border-radius:8px;border-left:4px solid #ef4444;">
-          <div style="font-size:13px;color:#dc2626;font-weight:500;margin-bottom:8px;">
-            <i class="fa-solid fa-heart-pulse"></i> Blood Pressure
-          </div>
-          <div style="font-size:24px;font-weight:700;color:#991b1b;">
-            <?= (int)$latest['blood_pressure_sys'] ?> / <?= (int)$latest['blood_pressure_dia'] ?>
-          </div>
-          <div style="font-size:12px;color:#dc2626;margin-top:4px;">mmHg</div>
+      <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+        <?php foreach ($vitalCards as $vc): ?>
+        <div class="p-4 rounded-xl border-l-4 <?= $vc['classes'] ?>">
+          <p class="text-xs font-medium mb-2 opacity-80"><?= $vc['label'] ?></p>
+          <p class="text-2xl font-bold"><?= $vc['value'] ?></p>
+          <p class="text-xs mt-1 opacity-70"><?= $vc['unit'] ?></p>
         </div>
-        <?php endif; ?>
-
-        <?php if ($latest['heart_rate']): ?>
-        <div style="padding:16px;background:#fecaca;border-radius:8px;border-left:4px solid #fca5a5;">
-          <div style="font-size:13px;color:#dc2626;font-weight:500;margin-bottom:8px;">
-            <i class="fa-solid fa-pulse"></i> Heart Rate
-          </div>
-          <div style="font-size:24px;font-weight:700;color:#991b1b;">
-            <?= (int)$latest['heart_rate'] ?>
-          </div>
-          <div style="font-size:12px;color:#dc2626;margin-top:4px;">bpm</div>
-        </div>
-        <?php endif; ?>
-
-        <?php if ($latest['temperature']): ?>
-        <div style="padding:16px;background:#fed7aa;border-radius:8px;border-left:4px solid #fb923c;">
-          <div style="font-size:13px;color:#b45309;font-weight:500;margin-bottom:8px;">
-            <i class="fa-solid fa-temperature-half"></i> Temperature
-          </div>
-          <div style="font-size:24px;font-weight:700;color:#7c2d12;">
-            <?= (float)$latest['temperature'] ?>
-          </div>
-          <div style="font-size:12px;color:#b45309;margin-top:4px;">°C</div>
-        </div>
-        <?php endif; ?>
-
-        <?php if ($latest['oxygen_saturation']): ?>
-        <div style="padding:16px;background:#bfdbfe;border-radius:8px;border-left:4px solid #60a5fa;">
-          <div style="font-size:13px;color:#1e40af;font-weight:500;margin-bottom:8px;">
-            <i class="fa-solid fa-lungs"></i> Oxygen Saturation
-          </div>
-          <div style="font-size:24px;font-weight:700;color:#1e3a8a;">
-            <?= (int)$latest['oxygen_saturation'] ?>
-          </div>
-          <div style="font-size:12px;color:#1e40af;margin-top:4px;">%</div>
-        </div>
-        <?php endif; ?>
-
-        <?php if ($latest['blood_sugar']): ?>
-        <div style="padding:16px;background:#a7f3d0;border-radius:8px;border-left:4px solid #34d399;">
-          <div style="font-size:13px;color:#065f46;font-weight:500;margin-bottom:8px;">
-            <i class="fa-solid fa-droplet"></i> Blood Sugar
-          </div>
-          <div style="font-size:24px;font-weight:700;color:#064e3b;">
-            <?= (float)$latest['blood_sugar'] ?>
-          </div>
-          <div style="font-size:12px;color:#065f46;margin-top:4px;">mg/dL</div>
-        </div>
-        <?php endif; ?>
-
-        <?php if ($latest['bmi']): ?>
-        <div style="padding:16px;background:#e9d5ff;border-radius:8px;border-left:4px solid #d8b4fe;">
-          <div style="font-size:13px;color:#6b21a8;font-weight:500;margin-bottom:8px;">
-            <i class="fa-solid fa-weight-scale"></i> BMI
-          </div>
-          <div style="font-size:24px;font-weight:700;color:#581c87;">
-            <?= (float)$latest['bmi'] ?>
-          </div>
-          <div style="font-size:12px;color:#6b21a8;margin-top:4px;">kg/m²</div>
-        </div>
-        <?php endif; ?>
+        <?php endforeach; ?>
       </div>
 
       <?php if ($latest['notes']): ?>
-      <div style="margin-top:16px;padding:12px;background:#f3f4f6;border-radius:8px;border-left:4px solid #6b7280;">
-        <strong style="color:#1f2937;font-size:13px;">Notes:</strong><br>
-        <span style="font-size:13px;color:#4b5563;display:block;margin-top:4px;">
-          <?= nl2br(htmlspecialchars($latest['notes'])) ?>
-        </span>
+      <div class="mt-4 p-3 bg-slate-50 rounded-xl border-l-4 border-slate-400 text-sm text-slate-600">
+        <strong class="text-slate-800">Notes:</strong><br>
+        <?= nl2br(htmlspecialchars($latest['notes'])) ?>
       </div>
       <?php endif; ?>
     </div>
     <?php endif; ?>
 
-  </div><!-- /content -->
+  </div>
 </main>
 
 <script>
   function toggleSidebar() {
-    document.getElementById('sidebar').classList.toggle('open');
-    document.getElementById('overlay').classList.toggle('open');
+    document.getElementById('sidebar').classList.toggle('-translate-x-full');
+    document.getElementById('overlay').classList.toggle('hidden');
   }
-  
   function closeSidebar() {
-    document.getElementById('sidebar').classList.remove('open');
-    document.getElementById('overlay').classList.remove('open');
+    document.getElementById('sidebar').classList.add('-translate-x-full');
+    document.getElementById('overlay').classList.add('hidden');
   }
 
-  function toggleDetail(element) {
-    const detailContent = element.nextElementSibling;
-    detailContent.classList.toggle('open');
-    element.querySelector('i').style.transform = detailContent.classList.contains('open') ? 'rotate(180deg)' : 'rotate(0deg)';
-    element.querySelector('i').style.transition = 'transform 0.3s ease';
+  function toggleDetail(btn) {
+    const content = btn.nextElementSibling;
+    const icon = btn.querySelector('.chevron-icon');
+    content.classList.toggle('open');
+    icon.style.transform = content.classList.contains('open') ? 'rotate(180deg)' : 'rotate(0)';
   }
 
-  function filterRecords(status) {
-    // Update active tab
-    document.querySelectorAll('.filter-tab').forEach(tab => tab.classList.remove('active'));
-    event.target.closest('.filter-tab').classList.add('active');
-
-    // Filter records
-    const container = document.getElementById('records-container');
-    if (!container) return;
-
-    const records = container.querySelectorAll('.lab-card');
-    records.forEach(record => {
-      if (status === 'all') {
-        record.style.display = 'block';
-      } else if (status === 'vitals') {
-        record.style.display = record.getAttribute('data-type') === 'record' ? 'block' : 'none';
-      } else {
-        record.style.display = record.getAttribute('data-status') === status ? 'block' : 'none';
-      }
+  function filterRecords(status, btn) {
+    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.lab-card').forEach(card => {
+      card.style.display = (status === 'all' || card.dataset.status === status) ? '' : 'none';
     });
   }
 </script>

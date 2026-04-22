@@ -1,5 +1,4 @@
 <?php
-// Patient Records - View-Only Medical History
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'patient') {
     header('Location: ' . url('auth/login'));
     exit;
@@ -8,12 +7,10 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'patient') {
 $userId = (int) $_SESSION['user_id'];
 $db = new Database();
 
-/* ─── Resolve patient_id ─── */
 $patientRow = $db->table('patients')->where('user_id', $userId)->get();
 if (!$patientRow) die('Patient record not found.');
 $patientId = (int) $patientRow['patient_id'];
 
-/* ─── Get patient name ─── */
 $me = $db->table('users u')
     ->select('CONCAT(p.first_name, \' \', p.last_name) AS full_name, u.role')
     ->join('user_profiles p', 'u.user_id = p.user_id', 'INNER ')
@@ -21,21 +18,12 @@ $me = $db->table('users u')
     ->get();
 $fullName = htmlspecialchars($me['full_name'] ?? 'Patient');
 
-/* ─── Latest vitals from health_metrics ─── */
 $latestVitals = $db->table('health_metrics hm')
     ->where('hm.patient_id', $patientId)
     ->order_by('hm.recorded_at', 'DESC')
     ->limit(1)
     ->get();
 
-/* ─── Vitals trend (last 6 months) from health_metrics ─── */
-$vitalsHistory = $db->table('health_metrics')
-    ->select('DATE(recorded_at) AS date, blood_pressure_sys, blood_pressure_dia, heart_rate, blood_sugar, weight_kg, bmi')
-    ->where('patient_id', $patientId)
-    ->order_by('recorded_at', 'ASC')
-    ->get_all();
-
-/* ─── Health records list - JOIN with doctors for doctor name and specialization ─── */
 $records = $db->table('health_records hr')
     ->select('hr.record_id, hr.record_date, hr.visit_type, hr.chief_complaint, hr.diagnosis, hr.treatment, hr.prescription, hr.blood_pressure, hr.heart_rate, hr.temperature, hr.oxygen_saturation, hr.weight_kg, hr.bmi, hr.doctor_notes, hr.lab_results, hr.status, CONCAT(dp.first_name, \' \', dp.last_name) AS doctor_name, d.specialization')
     ->join('doctors d', 'hr.doctor_id = d.doctor_id', 'INNER ')
@@ -44,267 +32,153 @@ $records = $db->table('health_records hr')
     ->order_by('hr.record_date', 'DESC')
     ->get_all();
 
-/* ─── Prepare records by ID for modal JavaScript ─── */
 $recordsById = [];
 foreach ($records as $record) {
     $recordsById[$record['record_id']] = $record;
 }
 
-/* ─── Type icon/color map ─── */
 $typeMap = [
-    'General Check-up' => ['icon' => 'fa-stethoscope',    'color' => '#0d9488', 'bg' => '#ccfbf1'],
-    'Follow-up'        => ['icon' => 'fa-rotate-right',   'color' => '#0ea5e9', 'bg' => '#e0f2fe'],
-    'Emergency'        => ['icon' => 'fa-truck-medical',  'color' => '#ef4444', 'bg' => '#fee2e2'],
-    'Vaccination'      => ['icon' => 'fa-syringe',        'color' => '#a855f7', 'bg' => '#f3e8ff'],
-    'Laboratory'       => ['icon' => 'fa-flask',          'color' => '#10b981', 'bg' => '#d1fae5'],
-    'Consultation'     => ['icon' => 'fa-comment-medical','color' => '#d97706', 'bg' => '#fef3c7'],
-    'Procedure'        => ['icon' => 'fa-scalpel',        'color' => '#64748b', 'bg' => '#f1f5f9'],
-    'Dental'           => ['icon' => 'fa-tooth',          'color' => '#f59e0b', 'bg' => '#fef9c3'],
-    'Eye Exam'         => ['icon' => 'fa-eye',            'color' => '#3b82f6', 'bg' => '#dbeafe'],
-    'Other'            => ['icon' => 'fa-file-medical',   'color' => '#64748b', 'bg' => '#f1f5f9'],
-];
-$statusColors = [
-    'Final'    => ['color' => '#0d9488', 'bg' => '#ccfbf1'],
-    'Draft'    => ['color' => '#d97706', 'bg' => '#fef3c7'],
-    'Archived' => ['color' => '#64748b', 'bg' => '#f1f5f9'],
+    'General Check-up' => ['icon' => 'fa-stethoscope',    'classes' => 'bg-teal-100 text-teal-600'],
+    'Follow-up'        => ['icon' => 'fa-rotate-right',   'classes' => 'bg-sky-100 text-sky-500'],
+    'Emergency'        => ['icon' => 'fa-truck-medical',  'classes' => 'bg-red-100 text-red-500'],
+    'Vaccination'      => ['icon' => 'fa-syringe',        'classes' => 'bg-purple-100 text-purple-600'],
+    'Laboratory'       => ['icon' => 'fa-flask',          'classes' => 'bg-emerald-100 text-emerald-600'],
+    'Consultation'     => ['icon' => 'fa-comment-medical','classes' => 'bg-amber-100 text-amber-600'],
+    'Procedure'        => ['icon' => 'fa-scalpel',        'classes' => 'bg-slate-100 text-slate-500'],
+    'Dental'           => ['icon' => 'fa-tooth',          'classes' => 'bg-yellow-100 text-yellow-600'],
+    'Eye Exam'         => ['icon' => 'fa-eye',            'classes' => 'bg-blue-100 text-blue-500'],
+    'Other'            => ['icon' => 'fa-file-medical',   'classes' => 'bg-slate-100 text-slate-500'],
 ];
 
-/* ─── BMI label helper ─── */
-function bmiLabel(float $bmi): string {
-    return match(true) {
-        $bmi < 18.5 => 'Underweight',
-        $bmi < 25.0 => 'Normal',
-        $bmi < 30.0 => 'Overweight',
-        default     => 'Obese',
-    };
-}
-function bmiColor(float $bmi): string {
-    return match(true) {
-        $bmi < 18.5 => '#3b82f6',
-        $bmi < 25.0 => '#0d9488',
-        $bmi < 30.0 => '#d97706',
-        default     => '#ef4444',
-    };
-}
+$statusMap = [
+    'Final'    => 'bg-teal-100 text-teal-700',
+    'Draft'    => 'bg-amber-100 text-amber-700',
+    'Archived' => 'bg-slate-100 text-slate-600',
+];
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full bg-slate-50">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>My Health Records — ClinicEase</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous"/>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="<?= url('public/css/output.css') ?>">
   <style>
-    :root {
-      --sidebar-w: 260px;
-      --teal: #0d9488;
-      --teal-light: #ccfbf1;
-      --navy: #0f172a;
-      --muted: #64748b;
-      --surface: #f8fafc;
-      --card: #ffffff;
-      --border: #e2e8f0;
-      --accent: #f59e0b;
+    body { font-family: 'DM Sans', sans-serif; }
+    .main-content { min-width: 0; display: flex; flex-direction: column; min-height: 100vh; }
+    @media (min-width: 1024px) { .main-content { margin-left: 16rem; } }
+    @keyframes modalIn {
+      from { opacity: 0; transform: translateY(10px) scale(.98); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'DM Sans', sans-serif; background: var(--surface); color: var(--navy); display: flex; min-height: 100vh; }
-
-    .sidebar { width: var(--sidebar-w); background: var(--navy); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh; z-index: 50; transition: transform .3s; }
-    .sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 28px 24px 24px; border-bottom: 1px solid rgba(255,255,255,.08); }
-    .sidebar-logo .icon-box { width: 36px; height: 36px; border-radius: 10px; background: var(--teal); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-    .sidebar-logo span { font-weight: 700; font-size: 16px; color: #fff; }
-    .sidebar-section { padding: 20px 16px 8px; font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: #475569; text-transform: uppercase; }
-    .nav-link { display: flex; align-items: center; gap: 12px; padding: 10px 16px; margin: 2px 8px; border-radius: 10px; color: #94a3b8; font-size: 14px; font-weight: 500; text-decoration: none; transition: background .2s, color .2s; }
-    .nav-link i { width: 18px; text-align: center; font-size: 14px; }
-    .nav-link:hover { background: rgba(255,255,255,.07); color: #e2e8f0; }
-    .nav-link.active { background: var(--teal); color: #fff; }
-    .badge-count { margin-left: auto; background: var(--accent); color: #fff; font-size: 10px; font-weight: 700; border-radius: 20px; padding: 1px 7px; }
-    .sidebar-footer { margin-top: auto; padding: 16px; border-top: 1px solid rgba(255,255,255,.08); }
-    .user-chip { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); margin-bottom: 10px; }
-    .user-avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--teal), #0ea5e9); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: #fff; flex-shrink: 0; }
-    .user-name { font-size: 13px; font-weight: 600; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .user-role { font-size: 11px; color: #64748b; text-transform: capitalize; }
-    .logout-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 10px; border-radius: 10px; background: rgba(239,68,68,.12); color: #f87171; font-size: 13px; font-weight: 600; border: none; cursor: pointer; text-decoration: none; transition: background .2s; }
-    .logout-btn:hover { background: rgba(239,68,68,.22); }
-
-    .main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
-    .topbar { display: flex; align-items: center; justify-content: space-between; padding: 20px 32px; background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 40; }
-    .topbar-left h2 { font-size: 20px; font-weight: 700; }
-    .topbar-left p { font-size: 13px; color: var(--muted); margin-top: 2px; }
-    .topbar-right { display: flex; align-items: center; gap: 14px; }
-    .icon-btn { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); display: flex; align-items: center; justify-content: center; color: var(--muted); cursor: pointer; font-size: 15px; position: relative; transition: border-color .2s, color .2s; }
-    .icon-btn:hover { border-color: var(--teal); color: var(--teal); }
-    .hamburger { display: none; }
-    .content { padding: 32px; flex: 1; }
-
-    .role-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 8px; background: #dbeafe; color: #1d4ed8; font-size: 12px; font-weight: 700; margin-bottom: 20px; }
-
-    .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; display: flex; align-items: center; gap: 14px; transition: transform .2s, box-shadow .2s; }
-    .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.07); }
-    .stat-icon { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
-    .stat-value { font-size: 24px; font-weight: 700; line-height: 1; }
-    .stat-label { font-size: 12px; color: var(--muted); margin-top: 3px; }
-
-    .section { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 20px; margin-bottom: 20px; overflow: hidden; }
-
-    .vital-card { display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
-    .vital-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 16px; }
-    .vital-value { font-size: 16px; font-weight: 700; }
-    .vital-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
-    .vital-note { font-size: 10px; margin-top: 2px; font-weight: 500; }
-
-    .record-item { padding: 16px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 12px; transition: all .2s; cursor: pointer; }
-    .record-item:hover { border-color: var(--teal); background: var(--surface); }
-
-    .record-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; font-size: 16px; }
-
-    .quick-link { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); font-size: 12px; font-weight: 600; color: var(--navy); text-decoration: none; transition: border-color .2s, background .2s, color .2s; }
-    .quick-link:hover { border-color: var(--teal); background: var(--teal-light); color: var(--teal); }
-
-    .empty-state { text-align: center; padding: 60px 24px; color: var(--muted); }
-    .empty-state .empty-icon { font-size: 40px; color: #cbd5e1; margin-bottom: 12px; }
-    .empty-state h4 { font-size: 15px; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
-    .empty-state p { font-size: 13px; }
-
-    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100; align-items: center; justify-content: center; }
-    .modal.open { display: flex; }
-    .modal-content { background: var(--card); border-radius: 16px; padding: 28px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
-    .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-    .modal-header h2 { font-size: 18px; font-weight: 700; }
-    .modal-close { width: 32px; height: 32px; border: none; background: var(--surface); border-radius: 8px; cursor: pointer; font-size: 16px; color: var(--muted); }
-
-    .detail-section { margin-bottom: 20px; }
-    .detail-section-title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 12px; }
-    .detail-grid { display: grid; gap: 12px; }
-    .detail-item { padding: 12px; background: var(--surface); border-radius: 8px; }
-    .detail-item.full { grid-column: 1 / -1; }
-    .d-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
-    .d-value { font-size: 13px; color: var(--navy); }
-
-    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 45; }
-    .overlay.open { display: block; }
-
-    @keyframes fadein { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    .fade-up { animation: fadein .4s ease both; }
-    .d1 { animation-delay: .05s } .d2 { animation-delay: .10s } .d3 { animation-delay: .15s }
-
-    @media (max-width: 768px) {
-      .sidebar { transform: translateX(-100%); } .sidebar.open { transform: translateX(0); }
-      .main { margin-left: 0; } .hamburger { display: flex; }
-      .content { padding: 20px 16px; } .topbar { padding: 16px 20px; }
-      [style*="grid-template-columns:repeat(auto-fit"] { grid-template-columns: 1fr !important; }
-    }
+    .modal-animate { animation: modalIn .18s ease; }
   </style>
 </head>
-<body>
+<body class="bg-slate-50 h-full">
 
 <?php include 'aside.php'; ?>
+<div class="overlay fixed inset-0 bg-slate-900/50 z-40 hidden lg:hidden" id="overlay" onclick="closeSidebar()"></div>
 
-<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+<main class="main-content lg:ml-64">
+  <?php include 'header.php'; ?>
 
-<main class="main">
+  <div class="p-6 space-y-6">
 
-  <div class="topbar">
-    <div style="display:flex;align-items:center;gap:12px;">
-      <button class="icon-btn hamburger" onclick="toggleSidebar()"><i class="fa-solid fa-bars"></i></button>
-      <div class="topbar-left">
-        <h2>My Health Records</h2>
-        <p><?= date('l, F j, Y') ?></p>
-      </div>
-    </div>
-    <div class="topbar-right">
-      <div class="icon-btn" title="Notifications"><i class="fa-regular fa-bell"></i></div>
-      <div class="icon-btn" title="Help"><i class="fa-regular fa-circle-question"></i></div>
-    </div>
-  </div>
-
-  <div class="content">
-
-    <div class="role-badge fade-up d1">
-      <i class="fa-solid fa-file-medical"></i>Your Complete Medical History
+    <!-- Badge -->
+    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 text-xs font-bold">
+      <i class="fa-solid fa-file-medical"></i> Your Complete Medical History
     </div>
 
     <!-- Vitals Summary -->
-    <?php if ($latestVitals): ?>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:24px;width:100%;">
-      <?php
-        $vitals_list = [
-          ['icon'=>'fa-heart-pulse',      'color'=>'#ef4444','bg'=>'#fee2e2', 'label'=>'Blood Pressure', 'value'=>$latestVitals['blood_pressure_sys'].'/'.$latestVitals['blood_pressure_dia'].' mmHg'],
-          ['icon'=>'fa-wave-square',      'color'=>'#3b82f6','bg'=>'#dbeafe', 'label'=>'Heart Rate',     'value'=>$latestVitals['heart_rate'].' bpm'],
-          ['icon'=>'fa-droplet',          'color'=>'#0d9488','bg'=>'#ccfbf1', 'label'=>'Blood Sugar',    'value'=>$latestVitals['blood_sugar'].' mg/dL'],
-          ['icon'=>'fa-lungs',            'color'=>'#0ea5e9','bg'=>'#e0f2fe', 'label'=>'Oxygen Sat.',     'value'=>$latestVitals['oxygen_saturation'].'%'],
-          ['icon'=>'fa-temperature-half', 'color'=>'#a855f7','bg'=>'#f3e8ff', 'label'=>'Temperature',    'value'=>$latestVitals['temperature'].' °C'],
-          ['icon'=>'fa-weight-scale',     'color'=>'#d97706','bg'=>'#fef3c7', 'label'=>'Weight',         'value'=>$latestVitals['weight_kg'].' kg'],
-        ];
-        foreach($vitals_list as $v):
-      ?>
-      <div class="vital-card fade-up d1">
-        <div class="vital-icon" style="background:<?= $v['bg'] ?>;color:<?= $v['color'] ?>;">
-          <i class="fa-solid <?= $v['icon'] ?>"></i>
+    <?php if ($latestVitals):
+      $vitals_list = [
+        ['icon'=>'fa-heart-pulse',      'classes'=>'bg-red-100 text-red-500',     'label'=>'Blood Pressure', 'value'=>$latestVitals['blood_pressure_sys'].'/'.$latestVitals['blood_pressure_dia'].' mmHg'],
+        ['icon'=>'fa-wave-square',      'classes'=>'bg-blue-100 text-blue-500',   'label'=>'Heart Rate',     'value'=>$latestVitals['heart_rate'].' bpm'],
+        ['icon'=>'fa-droplet',          'classes'=>'bg-teal-100 text-teal-600',   'label'=>'Blood Sugar',    'value'=>$latestVitals['blood_sugar'].' mg/dL'],
+        ['icon'=>'fa-lungs',            'classes'=>'bg-sky-100 text-sky-500',     'label'=>'Oxygen Sat.',    'value'=>$latestVitals['oxygen_saturation'].'%'],
+        ['icon'=>'fa-temperature-half', 'classes'=>'bg-purple-100 text-purple-600','label'=>'Temperature',   'value'=>$latestVitals['temperature'].' °C'],
+        ['icon'=>'fa-weight-scale',     'classes'=>'bg-amber-100 text-amber-600', 'label'=>'Weight',         'value'=>$latestVitals['weight_kg'].' kg'],
+      ];
+    ?>
+    <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4">
+      <?php foreach ($vitals_list as $v): ?>
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col gap-2 shadow-sm hover:shadow-md transition-all">
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center <?= $v['classes'] ?>">
+          <i class="fa-solid <?= $v['icon'] ?> text-sm"></i>
         </div>
-        <div class="vital-value"><?= htmlspecialchars($v['value']) ?></div>
-        <div class="vital-label"><?= $v['label'] ?></div>
+        <div class="text-base font-bold text-slate-800"><?= htmlspecialchars($v['value']) ?></div>
+        <div class="text-xs text-slate-500"><?= $v['label'] ?></div>
       </div>
       <?php endforeach; ?>
     </div>
     <?php endif; ?>
 
     <!-- Records Section -->
-    <div class="section fade-up d2">
-      <div style="margin-bottom:20px;">
-        <h3 style="font-size:15px;font-weight:700;color:var(--navy);margin-bottom:4px;">Visit Records</h3>
-        <p style="font-size:12px;color:var(--muted);"><?= count($records) ?> record<?= count($records) !== 1 ? 's' : '' ?> from your doctors</p>
+    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
+      <div class="flex items-center justify-between mb-5">
+        <div>
+          <h3 class="text-base font-bold text-slate-800">Visit Records</h3>
+          <p class="text-xs text-slate-500 mt-0.5"><?= count($records) ?> record<?= count($records) !== 1 ? 's' : '' ?> from your doctors</p>
+        </div>
       </div>
 
       <?php if (empty($records)): ?>
-      <div class="empty-state">
-        <div class="empty-icon"><i class="fa-solid fa-file-circle-xmark"></i></div>
-        <h4>No health records yet</h4>
-        <p>Your doctors' visit records will appear here</p>
-      </div>
+        <div class="flex flex-col items-center justify-center py-16 text-slate-400">
+          <i class="fa-solid fa-file-circle-xmark text-4xl mb-3"></i>
+          <h4 class="text-sm font-bold text-slate-600 mb-1">No health records yet</h4>
+          <p class="text-xs">Your doctors' visit records will appear here</p>
+        </div>
       <?php else: ?>
-      <div style="display:grid;gap:12px;">
-        <?php foreach ($records as $i => $record): ?>
-        <div class="record-item fade-up" onclick="openRecord(<?= $record['record_id'] ?>)" style="animation-delay:<?= ($i * 0.05) ?>s">
-          <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;">
-            <div style="flex:1;">
-              <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:4px;">
-                <?= htmlspecialchars($record['visit_type']) ?>
-              </div>
-              <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">
-                <i class="fa-regular fa-calendar" style="margin-right:4px;"></i><?= date('M d, Y', strtotime($record['record_date'])) ?>
+        <div class="space-y-3">
+          <?php foreach ($records as $i => $record):
+            $t = $typeMap[$record['visit_type']] ?? $typeMap['Other'];
+            $sBadge = $statusMap[$record['status']] ?? 'bg-slate-100 text-slate-600';
+          ?>
+          <div class="flex items-start gap-4 p-4 rounded-xl border border-slate-100 hover:bg-slate-50 hover:border-slate-200 transition-all cursor-pointer"
+               onclick="openRecord(<?= $record['record_id'] ?>)">
+
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 <?= $t['classes'] ?>">
+              <i class="fa-solid <?= $t['icon'] ?> text-sm"></i>
+            </div>
+
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-bold text-slate-800"><?= htmlspecialchars($record['visit_type']) ?></p>
+              <p class="text-xs text-slate-500 mt-0.5">
+                <i class="fa-regular fa-calendar mr-1"></i><?= date('M d, Y', strtotime($record['record_date'])) ?>
                 &nbsp;·&nbsp;
-                <i class="fa-solid fa-user-doctor" style="margin-right:4px;"></i>Dr. <?= htmlspecialchars($record['doctor_name']) ?>
-              </div>
+                <i class="fa-solid fa-user-doctor mr-1"></i>Dr. <?= htmlspecialchars($record['doctor_name']) ?>
+              </p>
               <?php if ($record['diagnosis']): ?>
-              <div style="font-size:12px;color:var(--navy);font-style:italic;margin-top:6px;">
-                <?= htmlspecialchars(substr($record['diagnosis'], 0, 100)) ?><?= strlen($record['diagnosis']) > 100 ? '...' : '' ?>
-              </div>
+              <p class="text-xs text-slate-600 italic mt-1">
+                <?= htmlspecialchars(substr($record['diagnosis'], 0, 100)) ?><?= strlen($record['diagnosis']) > 100 ? '…' : '' ?>
+              </p>
               <?php endif; ?>
             </div>
-            <span style="background:var(--teal-light);color:var(--teal);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;white-space:nowrap;">
+
+            <span class="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide <?= $sBadge ?> shrink-0">
               <?= htmlspecialchars($record['status']) ?>
             </span>
           </div>
+          <?php endforeach; ?>
         </div>
-        <?php endforeach; ?>
-      </div>
       <?php endif; ?>
-
     </div>
 
   </div>
 </main>
 
 <!-- Record Detail Modal -->
-<div class="modal" id="recordModal">
-  <div class="modal-content">
-    <div class="modal-header">
-      <h2>Record Details</h2>
-      <button class="modal-close" onclick="closeRecordModal()"><i class="fa-solid fa-xmark"></i></button>
+<div class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 items-center justify-center p-4" id="recordModal">
+  <div class="modal-animate bg-white w-full max-w-xl rounded-2xl shadow-2xl p-7 relative max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="text-lg font-bold text-slate-800">Record Details</h2>
+      <button onclick="closeRecordModal()"
+              class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 transition-colors">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
     </div>
     <div id="modalBody"></div>
   </div>
@@ -316,68 +190,89 @@ function bmiColor(float $bmi): string {
   function openRecord(id) {
     const r = RECORDS[id];
     if (!r) return;
+    const val = v => v || '<span class="text-slate-300">—</span>';
 
-    const val = v => v || '<span style="color:#94a3b8">—</span>';
+    let sections = '';
 
-    let html = `
-      <div class="detail-section">
-        <h3 style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--navy);">
-          ${r.visit_type}
-        </h3>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">
-          ${new Date(r.record_date).toLocaleDateString()}
-          &nbsp;·&nbsp;
-          Dr. ${r.doctor_name}
+    if (r.chief_complaint || r.diagnosis || r.treatment || r.prescription) {
+      sections += `<div class="mb-5">
+        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Clinical Details</p>
+        <div class="space-y-2">`;
+      if (r.chief_complaint) sections += detailItem('Chief Complaint', r.chief_complaint);
+      if (r.diagnosis)       sections += detailItem('Diagnosis', r.diagnosis);
+      if (r.treatment)       sections += detailItem('Treatment', r.treatment);
+      if (r.prescription)    sections += detailItem('Prescription', r.prescription);
+      sections += `</div></div>`;
+    }
+
+    if (r.blood_pressure || r.heart_rate || r.temperature || r.oxygen_saturation) {
+      sections += `<div class="mb-5">
+        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Vitals at Visit</p>
+        <div class="grid grid-cols-2 gap-2">`;
+      if (r.blood_pressure)     sections += vitalBox('Blood Pressure', r.blood_pressure + ' mmHg');
+      if (r.heart_rate)         sections += vitalBox('Heart Rate', r.heart_rate + ' bpm');
+      if (r.temperature)        sections += vitalBox('Temperature', r.temperature + ' °C');
+      if (r.oxygen_saturation)  sections += vitalBox('Oxygen Sat.', r.oxygen_saturation + '%');
+      sections += `</div></div>`;
+    }
+
+    if (r.doctor_notes) {
+      sections += `<div class="mb-5">
+        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Doctor Notes</p>
+        ${detailItem('', r.doctor_notes)}
+      </div>`;
+    }
+
+    document.getElementById('modalBody').innerHTML = `
+      <div class="mb-4">
+        <h3 class="text-base font-bold text-slate-800">${r.visit_type}</h3>
+        <p class="text-xs text-slate-500 mt-1">
+          ${new Date(r.record_date).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}
+          &nbsp;·&nbsp; Dr. ${r.doctor_name}
           &nbsp;·&nbsp; ${r.specialization}
         </p>
       </div>
-
-      <div class="detail-section">
-        <div class="detail-section-title">Clinical Details</div>
-        <div class="detail-grid">
-          ${r.chief_complaint ? `<div class="detail-item full"><div class="d-label">Chief Complaint</div><div class="d-value">${val(r.chief_complaint)}</div></div>` : ''}
-          ${r.diagnosis ? `<div class="detail-item full"><div class="d-label">Diagnosis</div><div class="d-value">${val(r.diagnosis)}</div></div>` : ''}
-          ${r.treatment ? `<div class="detail-item full"><div class="d-label">Treatment</div><div class="d-value">${val(r.treatment)}</div></div>` : ''}
-          ${r.prescription ? `<div class="detail-item full"><div class="d-label">Prescription</div><div class="d-value">${val(r.prescription)}</div></div>` : ''}
-        </div>
-      </div>
-
-      ${(r.blood_pressure || r.heart_rate || r.temperature || r.oxygen_saturation) ? `
-      <div class="detail-section">
-        <div class="detail-section-title">Vitals at Visit</div>
-        <div class="detail-grid">
-          ${r.blood_pressure ? `<div class="detail-item"><div class="d-label">Blood Pressure</div><div class="d-value">${r.blood_pressure} mmHg</div></div>` : ''}
-          ${r.heart_rate ? `<div class="detail-item"><div class="d-label">Heart Rate</div><div class="d-value">${r.heart_rate} bpm</div></div>` : ''}
-          ${r.temperature ? `<div class="detail-item"><div class="d-label">Temperature</div><div class="d-value">${r.temperature} °C</div></div>` : ''}
-          ${r.oxygen_saturation ? `<div class="detail-item"><div class="d-label">Oxygen Sat.</div><div class="d-value">${r.oxygen_saturation}%</div></div>` : ''}
-        </div>
-      </div>` : ''}
-
-      ${r.doctor_notes ? `
-      <div class="detail-section">
-        <div class="detail-section-title">Doctor Notes</div>
-        <div class="detail-grid">
-          <div class="detail-item full"><div class="d-value">${val(r.doctor_notes)}</div></div>
-        </div>
-      </div>` : ''}
+      <hr class="border-slate-100 mb-4">
+      ${sections}
     `;
 
-    document.getElementById('modalBody').innerHTML = html;
-    document.getElementById('recordModal').classList.add('open');
+    const modal = document.getElementById('recordModal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  }
+
+  function detailItem(label, value) {
+    return `<div class="p-3 bg-slate-50 rounded-xl">
+      ${label ? `<p class="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1">${label}</p>` : ''}
+      <p class="text-sm text-slate-700">${value}</p>
+    </div>`;
+  }
+
+  function vitalBox(label, value) {
+    return `<div class="p-3 bg-slate-50 rounded-xl">
+      <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1">${label}</p>
+      <p class="text-sm font-bold text-slate-800">${value}</p>
+    </div>`;
   }
 
   function closeRecordModal() {
-    document.getElementById('recordModal').classList.remove('open');
+    const modal = document.getElementById('recordModal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
   }
+
+  document.getElementById('recordModal').addEventListener('click', e => {
+    if (e.target === document.getElementById('recordModal')) closeRecordModal();
+  });
 
   function toggleSidebar() {
-    document.querySelector('.sidebar').classList.toggle('open');
-    document.getElementById('overlay').classList.toggle('open');
+    document.getElementById('sidebar').classList.toggle('-translate-x-full');
+    document.getElementById('overlay').classList.toggle('hidden');
   }
-
   function closeSidebar() {
-    document.querySelector('.sidebar').classList.remove('open');
-    document.getElementById('overlay').classList.remove('open');
+    document.getElementById('sidebar').classList.add('-translate-x-full');
+    document.getElementById('overlay').classList.add('hidden');
+  }
 </script>
 </body>
 </html>

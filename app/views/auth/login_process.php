@@ -12,14 +12,14 @@ function clean(string $key, string $default = ''): string {
 }
 
 // ── Collect fields ────────────────────────────────────────────
-$username = clean('username');
+$email = clean('email');
 $password = clean('password');
 
 // ── Basic validation ──────────────────────────────────────────
 $errors = [];
 
-if (empty($username)) {
-    $errors[] = 'Username is required.';
+if (empty($email)) {
+    $errors[] = 'Email is required.';
 }
 if (empty($password)) {
     $errors[] = 'Password is required.';
@@ -42,10 +42,10 @@ try {
     $user = $db->table('users u')
         ->select('u.user_id, u.username, u.email, u.password_hash, u.role, p.first_name, p.last_name')
         ->inner_join('user_profiles p', 'u.user_id = p.user_id')
-        ->where('u.username', $username)
+        ->where('u.email', $email)
         ->get();
     
-    error_log("Query executed for username: $username, Result: " . ($user ? 'Found' : 'Not found'));
+    error_log("Query executed for email: $email, Result: " . ($user ? 'Found' : 'Not found'));
 
     if ($user) {
         error_log("User found - ID: " . $user['user_id']);
@@ -59,7 +59,7 @@ try {
     }
 
     if ($user && password_verify($password, $user['password_hash'])) {
-        error_log("Password verification successful for user: $username");
+        error_log("Password verification successful for user: $email");
         // ── Regenerate session ID to prevent session fixation ──
         session_regenerate_id(true);
 
@@ -78,19 +78,19 @@ try {
             default   => url('auth/login'),
         };
 
-        error_log("Login successful for user: $username, Redirecting to: $redirect");
+        error_log("Login successful for user: $email, Redirecting to: $redirect");
         header('Location: ' . $redirect);
         exit;
 
     } else {
         // ── Log failed attempt ────────────────────────────────
         if (!$user) {
-            error_log("Login attempt: Username '$username' not found");
+            error_log("Login attempt: Email '$email' not found");
         } else {
-            error_log("Login attempt: Password mismatch for username '$username'");
+            error_log("Login attempt: Password mismatch for email '$email'");
         }
         // ── Generic error (don't reveal which field is wrong) ──
-        $_SESSION['login_error'] = 'Invalid username or password.';
+        $_SESSION['login_error'] = 'Invalid email or password.';
         header('Location: ' . url('auth/login'));
         exit;
     }

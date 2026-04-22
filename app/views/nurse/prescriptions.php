@@ -130,10 +130,9 @@ $statusMap = [
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ClinicEase — Nurse Prescriptions</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous"/>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
-  <style>
+  <link rel="stylesheet" href="<?= url('public/css/output.css') ?>
     :root{--sidebar-w:260px;--teal:#0d9488;--teal-light:#ccfbf1;--navy:#0f172a;--muted:#64748b;--surface:#f8fafc;--card:#ffffff;--border:#e2e8f0;--accent:#f59e0b;}
     *{box-sizing:border-box;margin:0;padding:0;}
     body{font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--navy);display:flex;min-height:100vh;}

@@ -46,7 +46,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
         $time     = trim($_POST['appt_time']   ?? '');
         $notes    = trim($_POST['notes']        ?? '') ?: null;
 
-        /* Server-side validation */
         if (!$doctorId || !$type || !$date || !$time) {
             $_SESSION['appt_error'] = 'Please fill in all required fields.';
             header('Location: ' . url('patient/appointments'));
@@ -60,13 +59,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
 
         try {
             $db->table('appointments')->insert([
-                'patient_id' => $patientId,
-                'doctor_id' => $doctorId,
-                'type' => $type,
+                'patient_id'       => $patientId,
+                'doctor_id'        => $doctorId,
+                'type'             => $type,
                 'appointment_date' => $date,
                 'appointment_time' => $time,
-                'status' => 'Pending',
-                'notes' => $notes
+                'status'           => 'Pending',
+                'notes'            => $notes
             ]);
             $_SESSION['appt_success'] = 'Appointment booked successfully!';
         } catch (Exception $e) {
@@ -102,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
                 ->update([
                     'appointment_date' => $newDate,
                     'appointment_time' => $newTime,
-                    'status' => 'Pending'
+                    'status'           => 'Pending'
                 ]);
             $_SESSION['appt_success'] = 'Appointment rescheduled successfully.';
         } catch (Exception $e) {
@@ -138,7 +137,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
         $apptId = (int) $_POST['appointment_id'];
 
         try {
-            /* Only allow deleting Cancelled or Completed records */
             $result = $db->table('appointments')
                 ->where('appointment_id', $apptId)
                 ->where('patient_id', $patientId)
@@ -159,14 +157,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
         exit;
     }
 
-    /* Fallback for unknown action */
     header('Location: ' . url('patient/appointments'));
     exit;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   GET — Read flash messages from session then clear them
-════════════════════════════════════════════════════════════ */
+/* ─── Flash messages ─── */
 $success = $_SESSION['appt_success'] ?? '';
 $error   = $_SESSION['appt_error'] ?? '';
 unset($_SESSION['appt_success'], $_SESSION['appt_error']);
@@ -180,188 +175,224 @@ $appointments = $db->table('appointments a')
     ->order_by('a.appointment_date DESC, a.appointment_time DESC')
     ->get_all();
 
-/* ─── Icon / color map ─── */
+/* ─── Icon / color map — Tailwind classes only ─── */
 $typeMap = [
-    'General Check-up' => ['icon' => 'fa-stethoscope',     'color' => '#0d9488', 'bg' => '#ccfbf1'],
-    'Dental Cleaning'  => ['icon' => 'fa-tooth',            'color' => '#d97706', 'bg' => '#fef3c7'],
-    'Eye Examination'  => ['icon' => 'fa-eye',              'color' => '#3b82f6', 'bg' => '#dbeafe'],
-    'Vaccination'      => ['icon' => 'fa-syringe',          'color' => '#a855f7', 'bg' => '#f3e8ff'],
-    'Consultation'     => ['icon' => 'fa-comment-medical',  'color' => '#ef4444', 'bg' => '#fee2e2'],
-    'Follow-up'        => ['icon' => 'fa-rotate-right',     'color' => '#0ea5e9', 'bg' => '#e0f2fe'],
-    'Laboratory'       => ['icon' => 'fa-flask',            'color' => '#10b981', 'bg' => '#d1fae5'],
-    'Other'            => ['icon' => 'fa-calendar',         'color' => '#64748b', 'bg' => '#f1f5f9'],
+    'General Check-up' => ['icon' => 'fa-stethoscope',    'classes' => 'bg-teal-100 text-teal-600'],
+    'Dental Cleaning'  => ['icon' => 'fa-tooth',           'classes' => 'bg-amber-100 text-amber-600'],
+    'Eye Examination'  => ['icon' => 'fa-eye',             'classes' => 'bg-blue-100 text-blue-500'],
+    'Vaccination'      => ['icon' => 'fa-syringe',         'classes' => 'bg-purple-100 text-purple-600'],
+    'Consultation'     => ['icon' => 'fa-comment-medical', 'classes' => 'bg-red-100 text-red-500'],
+    'Follow-up'        => ['icon' => 'fa-rotate-right',    'classes' => 'bg-sky-100 text-sky-500'],
+    'Laboratory'       => ['icon' => 'fa-flask',           'classes' => 'bg-emerald-100 text-emerald-600'],
+    'Other'            => ['icon' => 'fa-calendar',        'classes' => 'bg-slate-100 text-slate-500'],
 ];
 
-$statusColors = [
-    'Pending'   => ['color' => '#d97706', 'bg' => '#fef3c7'],
-    'Confirmed' => ['color' => '#0d9488', 'bg' => '#ccfbf1'],
-    'Scheduled' => ['color' => '#3b82f6', 'bg' => '#dbeafe'],
-    'Completed' => ['color' => '#64748b', 'bg' => '#f1f5f9'],
-    'Cancelled' => ['color' => '#ef4444', 'bg' => '#fee2e2'],
-    'No-show'   => ['color' => '#9333ea', 'bg' => '#f3e8ff'],
+$statusMap = [
+    'Pending'   => 'bg-amber-100 text-amber-700',
+    'Confirmed' => 'bg-teal-100 text-teal-700',
+    'Scheduled' => 'bg-blue-100 text-blue-700',
+    'Completed' => 'bg-slate-100 text-slate-600',
+    'Cancelled' => 'bg-red-100 text-red-600',
+    'No-show'   => 'bg-purple-100 text-purple-700',
 ];
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full bg-slate-50">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ClinicEase — Appointments</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
-
-    <link rel="stylesheet" href="<?= url('public/css/appointment.css') ?>">
-  
+  <link rel="stylesheet" href="<?= url('public/css/output.css') ?>">
+  <style>
+    body { font-family: 'DM Sans', sans-serif; }
+    .main-content {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    @media (min-width: 1024px) {
+      .main-content { margin-left: 16rem; }
+    }
+    @keyframes modalIn {
+      from { opacity: 0; transform: translateY(10px) scale(.98); }
+      to   { opacity: 1; transform: translateY(0)   scale(1); }
+    }
+    .modal-animate { animation: modalIn .18s ease; }
+    .filter-tab.active {
+      background-color: #0d9488 !important;
+      color: #fff !important;
+      font-weight: 600;
+    }
+  </style>
 </head>
-<body>
-<!-- ── Sidebar ── -->
+<body class="bg-slate-50 h-full">
+
 <?php include 'aside.php'; ?>
+<div class="overlay fixed inset-0 bg-slate-900/50 z-40 hidden lg:hidden" id="overlay" onclick="closeSidebar()"></div>
 
-<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+<main class="main-content lg:ml-64">
+  <?php include 'header.php'; ?>
 
-<!-- ── Main ── -->
-<main class="main">
+  <div class="p-6 space-y-6">
 
-  <div class="topbar">
-    <div style="display:flex;align-items:center;gap:12px;">
-      <button class="icon-btn hamburger" onclick="toggleSidebar()"><i class="fa-solid fa-bars"></i></button>
-      <div class="topbar-left">
-        <h2>Appointments</h2>
-        <p>Manage and track your scheduled visits</p>
-      </div>
-    </div>
-    
-  </div>
-
-  <div class="content">
-
-    <!-- Flash toast (from session, shown only once) -->
-    <?php if ($success): ?>
-    <div class="toast success" id="toast"><i class="fa-solid fa-check-circle"></i><?= htmlspecialchars($success) ?></div>
-    <?php elseif ($error): ?>
-    <div class="toast error"   id="toast"><i class="fa-solid fa-triangle-exclamation"></i><?= htmlspecialchars($error) ?></div>
-    <?php endif; ?>
-
-    <!-- Page header -->
-    <div class="page-header fade-up d1">
-      <div>
-        <div class="page-title">My Appointments</div>
-        <div class="page-subtitle"><?= count($appointments) ?> appointment(s) total</div>
-      </div>
-      <div class="page-actions">
-        <div class="filter-tabs">
-          <button class="filter-tab active" onclick="filterAppts('all',      this)">All</button>
-          <button class="filter-tab"        onclick="filterAppts('upcoming',  this)">Upcoming</button>
-          <button class="filter-tab"        onclick="filterAppts('completed', this)">Completed</button>
-          <button class="filter-tab"        onclick="filterAppts('cancelled', this)">Cancelled</button>
+      <!-- Toast -->
+      <?php if ($success): ?>
+        <div class="flex items-center gap-3 px-4 py-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-medium shadow-sm">
+          <i class="fa-solid fa-circle-check text-emerald-500"></i>
+          <?= htmlspecialchars($success) ?>
         </div>
-        <button class="book-btn" onclick="openModal('bookModal')">
-          <i class="fa-solid fa-plus"></i> Book Appointment
-        </button>
-      </div>
-    </div>
-
-    <!-- Appointment list -->
-    <div class="panel fade-up d2" id="appt-panel">
-      <?php if (empty($appointments)): ?>
-        <div class="empty-state">
-          <i class="fa-regular fa-calendar-xmark"></i>
-          <p>No appointments found.<br>Click <strong>Book Appointment</strong> to get started.</p>
+      <?php elseif ($error): ?>
+        <div class="flex items-center gap-3 px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm font-medium shadow-sm">
+          <i class="fa-solid fa-triangle-exclamation text-red-400"></i>
+          <?= htmlspecialchars($error) ?>
         </div>
-      <?php else: ?>
-        <?php
-        $today = date('Y-m-d');
-        foreach ($appointments as $i => $a):
-          $t = $typeMap[$a['type']] ?? $typeMap['Other'];
-          $s = $statusColors[$a['status']] ?? ['color' => '#64748b', 'bg' => '#f1f5f9'];
-
-          $isPast    = ($a['appointment_date'] < $today);
-          $isActive  = !in_array($a['status'], ['Cancelled', 'Completed', 'No-show']);
-          $isDead    = in_array($a['status'], ['Cancelled', 'Completed', 'No-show']); // deletable
-
-          $filterTag = match(strtolower($a['status'])) {
-            'cancelled' => 'cancelled',
-            'completed' => 'completed',
-            'no-show'   => 'completed',
-            default     => ($isPast ? 'completed' : 'upcoming'),
-          };
-        ?>
-        <div class="appt-item"
-             data-filter="<?= $filterTag ?>"
-             style="animation: fadein .4s ease <?= $i * 0.055 ?>s both;">
-
-          <div class="appt-dot" style="background:<?= $t['bg'] ?>;color:<?= $t['color'] ?>;">
-            <i class="fa-solid <?= $t['icon'] ?>"></i>
-          </div>
-
-          <div class="appt-info">
-            <div class="appt-title"><?= htmlspecialchars($a['type']) ?></div>
-            <div class="appt-sub">
-              <i class="fa-regular fa-clock" style="margin-right:4px;"></i>
-              <?= date('M j, Y', strtotime($a['appointment_date'])) ?>
-              &nbsp;·&nbsp;
-              <?= date('g:i A', strtotime($a['appointment_time'])) ?>
-              &nbsp;·&nbsp;
-              <i class="fa-solid fa-user-doctor" style="margin-right:3px;"></i>
-              Dr. <?= htmlspecialchars($a['doctor_name']) ?>
-            </div>
-            <div class="appt-spec"><?= htmlspecialchars($a['specialization']) ?></div>
-          </div>
-
-          <span class="appt-badge" style="background:<?= $s['bg'] ?>;color:<?= $s['color'] ?>;">
-            <?= htmlspecialchars($a['status']) ?>
-          </span>
-
-          <div class="action-btns">
-            <?php if ($isActive && !$isPast): ?>
-              <!-- Reschedule -->
-              <button class="act-btn" title="Reschedule"
-                onclick="openReschedule(
-                  <?= $a['appointment_id'] ?>,
-                  '<?= htmlspecialchars($a['type'], ENT_QUOTES) ?>',
-                  '<?= $a['appointment_date'] ?>',
-                  '<?= substr($a['appointment_time'], 0, 5) ?>'
-                )">
-                <i class="fa-solid fa-calendar-days"></i>
-              </button>
-              <!-- Cancel -->
-              <button class="act-btn danger" title="Cancel"
-                onclick="openCancel(<?= $a['appointment_id'] ?>, '<?= htmlspecialchars($a['type'], ENT_QUOTES) ?>')">
-                <i class="fa-solid fa-xmark"></i>
-              </button>
-            <?php endif; ?>
-
-            <?php if ($isDead): ?>
-              <!-- Hard delete (only for Cancelled/Completed/No-show) -->
-              <button class="act-btn delete-btn" title="Delete record"
-                onclick="openDelete(<?= $a['appointment_id'] ?>, '<?= htmlspecialchars($a['type'], ENT_QUOTES) ?>')">
-                <i class="fa-solid fa-trash"></i>
-              </button>
-            <?php endif; ?>
-          </div>
-
-        </div>
-        <?php endforeach; ?>
       <?php endif; ?>
-    </div>
 
-  </div><!-- /content -->
+      <!-- Page Header -->
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-slate-800">My Appointments</h2>
+          <p class="text-sm text-slate-500 mt-0.5"><?= count($appointments) ?> appointment(s) total</p>
+        </div>
+
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+          <!-- Filter Tabs -->
+          <div class="flex flex-wrap gap-2">
+            <button class="filter-tab active px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-sm transition-colors"
+                    onclick="filterAppts('all', this)">All</button>
+            <button class="filter-tab px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-sm transition-colors"
+                    onclick="filterAppts('upcoming', this)">Upcoming</button>
+            <button class="filter-tab px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-sm transition-colors"
+                    onclick="filterAppts('completed', this)">Completed</button>
+            <button class="filter-tab px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-sm transition-colors"
+                    onclick="filterAppts('cancelled', this)">Cancelled</button>
+          </div>
+
+          <!-- Book Button -->
+          <button onclick="openModal('bookModal')"
+                  class="inline-flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-colors">
+            <i class="fa-solid fa-plus text-xs"></i> Book Appointment
+          </button>
+        </div>
+      </div>
+
+      <!-- Appointments List -->
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 space-y-3">
+
+        <?php if (empty($appointments)): ?>
+          <div class="flex flex-col items-center justify-center py-16 text-slate-400">
+            <i class="fa-regular fa-calendar-xmark text-4xl mb-3"></i>
+            <p class="text-sm text-center">
+              No appointments found.<br>
+              Click <strong class="text-slate-600">Book Appointment</strong> to get started.
+            </p>
+          </div>
+
+        <?php else: ?>
+          <?php
+          $today = date('Y-m-d');
+          foreach ($appointments as $a):
+            $t      = $typeMap[$a['type']] ?? $typeMap['Other'];
+            $sBadge = $statusMap[$a['status']] ?? 'bg-slate-100 text-slate-600';
+
+            $isPast   = ($a['appointment_date'] < $today);
+            $isActive = !in_array($a['status'], ['Cancelled', 'Completed', 'No-show']);
+            $isDead   = in_array($a['status'], ['Cancelled', 'Completed', 'No-show']);
+
+            $filterTag = match(strtolower($a['status'])) {
+              'cancelled' => 'cancelled',
+              'completed' => 'completed',
+              'no-show'   => 'completed',
+              default     => ($isPast ? 'completed' : 'upcoming'),
+            };
+          ?>
+
+          <div class="appt-item flex items-center gap-4 p-4 rounded-xl border border-slate-100 hover:bg-slate-50 hover:border-slate-200 transition-all"
+               data-filter="<?= $filterTag ?>">
+
+            <!-- Type Icon -->
+            <div class="flex items-center justify-center w-11 h-11 rounded-xl shrink-0 <?= $t['classes'] ?>">
+              <i class="fa-solid <?= $t['icon'] ?> text-sm"></i>
+            </div>
+
+            <!-- Info -->
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-bold text-slate-800"><?= htmlspecialchars($a['type']) ?></p>
+              <p class="text-xs text-slate-500 mt-0.5">
+                <?= date('M j, Y', strtotime($a['appointment_date'])) ?> ·
+                <?= date('g:i A', strtotime($a['appointment_time'])) ?> ·
+                Dr. <?= htmlspecialchars($a['doctor_name']) ?>
+              </p>
+              <p class="text-xs text-slate-400"><?= htmlspecialchars($a['specialization']) ?></p>
+            </div>
+
+            <!-- Status Badge -->
+            <span class="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide <?= $sBadge ?>">
+              <?= htmlspecialchars($a['status']) ?>
+            </span>
+
+            <!-- Action Buttons -->
+            <div class="flex items-center gap-1 shrink-0">
+              <?php if ($isActive && !$isPast): ?>
+                <button title="Reschedule"
+                        class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-teal-50 hover:text-teal-600 transition-colors"
+                        onclick="openReschedule(<?= $a['appointment_id'] ?>,'<?= htmlspecialchars($a['type'], ENT_QUOTES) ?>','<?= $a['appointment_date'] ?>','<?= substr($a['appointment_time'], 0, 5) ?>')">
+                  <i class="fa-solid fa-calendar-days text-sm"></i>
+                </button>
+                <button title="Cancel"
+                        class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                        onclick="openCancel(<?= $a['appointment_id'] ?>,'<?= htmlspecialchars($a['type'], ENT_QUOTES) ?>')">
+                  <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+              <?php endif; ?>
+
+              <?php if ($isDead): ?>
+                <button title="Delete record"
+                        class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-purple-50 hover:text-purple-600 transition-colors"
+                        onclick="openDelete(<?= $a['appointment_id'] ?>,'<?= htmlspecialchars($a['type'], ENT_QUOTES) ?>')">
+                  <i class="fa-solid fa-trash text-sm"></i>
+                </button>
+              <?php endif; ?>
+            </div>
+
+          </div>
+
+          <?php endforeach; ?>
+        <?php endif; ?>
+
+      </div>
+  </div>
 </main>
+
 
 <!-- ════════════════════════════════════════════════
      MODAL: Book New Appointment
 ════════════════════════════════════════════════ -->
-<div class="modal-overlay" id="bookModal">
-  <div class="modal-box">
-    <button class="modal-close" onclick="closeModal('bookModal')"><i class="fa-solid fa-xmark"></i></button>
-    <div class="modal-title"><i class="fa-solid fa-calendar-plus"></i>Book New Appointment</div>
-    <form method="POST" action="<?= url('patient/appointments') ?>">
+<div class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 items-center justify-center p-4" id="bookModal">
+  <div class="modal-animate bg-white w-full max-w-lg rounded-2xl shadow-2xl p-7 relative">
+
+    <button onclick="closeModal('bookModal')"
+            class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+
+    <div class="flex items-center gap-2 text-lg font-bold text-slate-800 mb-6">
+      <i class="fa-solid fa-calendar-plus text-teal-600"></i>
+      Book New Appointment
+    </div>
+
+    <form method="POST" action="<?= url('patient/appointments') ?>" class="space-y-5">
       <input type="hidden" name="action" value="book">
 
-      <div class="form-group">
-        <label class="form-label">Appointment Type</label>
-        <select name="appt_type" class="form-control" required>
+      <!-- Type -->
+      <div>
+        <label class="block text-sm font-medium text-slate-600 mb-1">Appointment Type</label>
+        <select name="appt_type"
+                class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:outline-none"
+                required>
           <option value="">Select type…</option>
           <?php foreach (array_keys($typeMap) as $t): ?>
             <option value="<?= htmlspecialchars($t) ?>"><?= htmlspecialchars($t) ?></option>
@@ -369,9 +400,12 @@ $statusColors = [
         </select>
       </div>
 
-      <div class="form-group">
-        <label class="form-label">Doctor</label>
-        <select name="doctor_id" class="form-control" required>
+      <!-- Doctor -->
+      <div>
+        <label class="block text-sm font-medium text-slate-600 mb-1">Doctor</label>
+        <select name="doctor_id"
+                class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:outline-none"
+                required>
           <option value="">Select doctor…</option>
           <?php foreach ($doctors as $doc): ?>
             <option value="<?= $doc['doctor_id'] ?>">
@@ -381,148 +415,217 @@ $statusColors = [
         </select>
       </div>
 
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Date</label>
-          <input type="date" name="appt_date" class="form-control" min="<?= date('Y-m-d') ?>" required>
+      <!-- Date & Time -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-600 mb-1">Date</label>
+          <input type="date" name="appt_date" min="<?= date('Y-m-d') ?>"
+                 class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:outline-none"
+                 required>
         </div>
-        <div class="form-group">
-          <label class="form-label">Time</label>
-          <input type="time" name="appt_time" class="form-control" required>
+        <div>
+          <label class="block text-sm font-medium text-slate-600 mb-1">Time</label>
+          <input type="time" name="appt_time"
+                 class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:outline-none"
+                 required>
         </div>
       </div>
 
-      <div class="form-group">
-        <label class="form-label">Notes (optional)</label>
-        <textarea name="notes" class="form-control" rows="3" placeholder="Describe your concern or symptoms…"></textarea>
+      <!-- Notes -->
+      <div>
+        <label class="block text-sm font-medium text-slate-600 mb-1">
+          Notes <span class="text-slate-400 font-normal">(optional)</span>
+        </label>
+        <textarea name="notes" rows="3"
+                  placeholder="Describe your concern or symptoms…"
+                  class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:outline-none resize-none"></textarea>
       </div>
 
-      <div class="modal-footer">
-        <button type="button" class="btn-cancel" onclick="closeModal('bookModal')">Cancel</button>
-        <button type="submit" class="btn-submit">
-          <i class="fa-solid fa-check" style="margin-right:6px;"></i>Book Appointment
+      <!-- Footer -->
+      <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+        <button type="button" onclick="closeModal('bookModal')"
+                class="px-4 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+          Cancel
+        </button>
+        <button type="submit"
+                class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold shadow-sm transition-colors">
+          <i class="fa-solid fa-check text-xs"></i> Book Appointment
         </button>
       </div>
     </form>
   </div>
 </div>
+
 
 <!-- ════════════════════════════════════════════════
      MODAL: Reschedule
 ════════════════════════════════════════════════ -->
-<div class="modal-overlay" id="rsModal">
-  <div class="modal-box" style="max-width:420px;">
-    <button class="modal-close" onclick="closeModal('rsModal')"><i class="fa-solid fa-xmark"></i></button>
-    <div class="modal-title"><i class="fa-solid fa-calendar-days"></i>Reschedule Appointment</div>
-    <div class="rs-badge"><i class="fa-solid fa-tag"></i><span id="rs-type"></span></div>
+<div class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 items-center justify-center p-4" id="rsModal">
+  <div class="modal-animate bg-white w-full max-w-sm rounded-2xl shadow-2xl p-7 relative">
+
+    <button onclick="closeModal('rsModal')"
+            class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 transition-colors">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+
+    <div class="flex items-center gap-2 text-lg font-bold text-slate-800 mb-2">
+      <i class="fa-solid fa-calendar-days text-teal-600"></i> Reschedule Appointment
+    </div>
+
+    <div class="inline-flex items-center gap-2 px-3 py-1 mb-5 rounded-full bg-slate-100 text-slate-600 text-xs font-medium">
+      <i class="fa-solid fa-tag text-slate-400"></i>
+      <span id="rs-type"></span>
+    </div>
+
     <form method="POST" action="<?= url('patient/appointments') ?>">
       <input type="hidden" name="action" value="reschedule">
       <input type="hidden" name="appointment_id" id="rs-id">
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">New Date</label>
-          <input type="date" name="new_date" id="rs-date" class="form-control" min="<?= date('Y-m-d') ?>" required>
+
+      <div class="grid grid-cols-2 gap-4 mb-6">
+        <div>
+          <label class="block text-sm font-medium text-slate-600 mb-1">New Date</label>
+          <input type="date" name="new_date" id="rs-date" min="<?= date('Y-m-d') ?>"
+                 class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:outline-none"
+                 required>
         </div>
-        <div class="form-group">
-          <label class="form-label">New Time</label>
-          <input type="time" name="new_time" id="rs-time" class="form-control" required>
+        <div>
+          <label class="block text-sm font-medium text-slate-600 mb-1">New Time</label>
+          <input type="time" name="new_time" id="rs-time"
+                 class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:outline-none"
+                 required>
         </div>
       </div>
-      <div class="modal-footer">
-        <button type="button" class="btn-cancel" onclick="closeModal('rsModal')">Cancel</button>
-        <button type="submit" class="btn-submit">
-          <i class="fa-solid fa-check" style="margin-right:6px;"></i>Confirm Reschedule
+
+      <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+        <button type="button" onclick="closeModal('rsModal')"
+                class="px-4 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+          Cancel
+        </button>
+        <button type="submit"
+                class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold shadow-sm transition-colors">
+          <i class="fa-solid fa-check text-xs"></i> Confirm Reschedule
         </button>
       </div>
     </form>
   </div>
 </div>
+
 
 <!-- ════════════════════════════════════════════════
      MODAL: Cancel Confirm
 ════════════════════════════════════════════════ -->
-<div class="modal-overlay" id="cancelModal">
-  <div class="modal-box" style="max-width:380px;text-align:center;">
-    <button class="modal-close" onclick="closeModal('cancelModal')"><i class="fa-solid fa-xmark"></i></button>
-    <div style="width:64px;height:64px;border-radius:50%;background:#fee2e2;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:26px;color:#ef4444;">
+<div class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 items-center justify-center p-4" id="cancelModal">
+  <div class="modal-animate bg-white w-full max-w-sm rounded-2xl shadow-2xl p-7 relative text-center">
+
+    <button onclick="closeModal('cancelModal')"
+            class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 transition-colors">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+
+    <div class="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4 text-2xl text-red-500">
       <i class="fa-solid fa-triangle-exclamation"></i>
     </div>
-    <div style="font-size:17px;font-weight:700;margin-bottom:8px;">Cancel Appointment?</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:24px;">
-      You are about to cancel <strong id="cancel-type"></strong>.<br>This action cannot be undone.
-    </div>
+    <p class="text-base font-bold text-slate-800 mb-2">Cancel Appointment?</p>
+    <p class="text-sm text-slate-500 mb-6">
+      You are about to cancel <strong id="cancel-type" class="text-slate-700"></strong>.<br>
+      This action cannot be undone.
+    </p>
+
     <form method="POST" action="<?= url('patient/appointments') ?>">
       <input type="hidden" name="action" value="cancel">
       <input type="hidden" name="appointment_id" id="cancel-id">
-      <div class="modal-footer" style="justify-content:center;">
-        <button type="button" class="btn-cancel" onclick="closeModal('cancelModal')">Keep it</button>
-        <button type="submit" class="btn-red">Yes, Cancel</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<!-- ════════════════════════════════════════════════
-     MODAL: Delete Confirm
-════════════════════════════════════════════════ -->
-<div class="modal-overlay" id="deleteModal">
-  <div class="modal-box" style="max-width:380px;text-align:center;">
-    <button class="modal-close" onclick="closeModal('deleteModal')"><i class="fa-solid fa-xmark"></i></button>
-    <div style="width:64px;height:64px;border-radius:50%;background:#f3e8ff;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:26px;color:#7c3aed;">
-      <i class="fa-solid fa-trash"></i>
-    </div>
-    <div style="font-size:17px;font-weight:700;margin-bottom:8px;">Delete Record?</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:24px;">
-      Permanently delete <strong id="delete-type"></strong> from your records?<br>
-      <span style="color:#ef4444;font-weight:600;">This cannot be undone.</span>
-    </div>
-    <form method="POST" action="<?= url('patient/appointments') ?>">
-      <input type="hidden" name="action" value="delete">
-      <input type="hidden" name="appointment_id" id="delete-id">
-      <div class="modal-footer" style="justify-content:center;">
-        <button type="button" class="btn-cancel" onclick="closeModal('deleteModal')">Keep it</button>
-        <button type="submit" class="btn-purple">
-          <i class="fa-solid fa-trash" style="margin-right:6px;"></i>Yes, Delete
+      <div class="flex justify-center gap-3">
+        <button type="button" onclick="closeModal('cancelModal')"
+                class="px-4 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+          Keep it
+        </button>
+        <button type="submit"
+                class="px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold shadow-sm transition-colors">
+          Yes, Cancel
         </button>
       </div>
     </form>
   </div>
 </div>
 
+
+<!-- ════════════════════════════════════════════════
+     MODAL: Delete Confirm
+════════════════════════════════════════════════ -->
+<div class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 items-center justify-center p-4" id="deleteModal">
+  <div class="modal-animate bg-white w-full max-w-sm rounded-2xl shadow-2xl p-7 relative text-center">
+
+    <button onclick="closeModal('deleteModal')"
+            class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 transition-colors">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+
+    <div class="w-16 h-16 rounded-full bg-purple-100 flex items-center justify-center mx-auto mb-4 text-2xl text-purple-600">
+      <i class="fa-solid fa-trash"></i>
+    </div>
+    <p class="text-base font-bold text-slate-800 mb-2">Delete Record?</p>
+    <p class="text-sm text-slate-500 mb-6">
+      Permanently delete <strong id="delete-type" class="text-slate-700"></strong> from your records?<br>
+      <span class="text-red-500 font-semibold">This cannot be undone.</span>
+    </p>
+
+    <form method="POST" action="<?= url('patient/appointments') ?>">
+      <input type="hidden" name="action" value="delete">
+      <input type="hidden" name="appointment_id" id="delete-id">
+      <div class="flex justify-center gap-3">
+        <button type="button" onclick="closeModal('deleteModal')"
+                class="px-4 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+          Keep it
+        </button>
+        <button type="submit"
+                class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold shadow-sm transition-colors">
+          <i class="fa-solid fa-trash text-xs"></i> Yes, Delete
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
 <script>
 /* ─── Sidebar ─── */
 function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('open');
-  document.getElementById('overlay').classList.toggle('open');
+  document.getElementById('sidebar').classList.toggle('-translate-x-full');
+  document.getElementById('overlay').classList.toggle('hidden');
 }
 function closeSidebar() {
-  document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('sidebar').classList.add('-translate-x-full');
+  document.getElementById('overlay').classList.add('hidden');
 }
 
 /* ─── Modals ─── */
-function openModal(id)  { document.getElementById(id).classList.add('open'); }
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-
+function openModal(id) {
+  const el = document.getElementById(id);
+  el.classList.remove('hidden');
+  el.classList.add('flex');
+}
+function closeModal(id) {
+  const el = document.getElementById(id);
+  el.classList.add('hidden');
+  el.classList.remove('flex');
+}
 // Close on backdrop click
-document.querySelectorAll('.modal-overlay').forEach(m => {
-  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+document.querySelectorAll('[id$="Modal"]').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) closeModal(m.id); });
 });
 
 function openReschedule(id, type, date, time) {
-  document.getElementById('rs-id').value           = id;
-  document.getElementById('rs-type').textContent   = type;
-  document.getElementById('rs-date').value         = date;
-  document.getElementById('rs-time').value         = time;
+  document.getElementById('rs-id').value         = id;
+  document.getElementById('rs-type').textContent = type;
+  document.getElementById('rs-date').value       = date;
+  document.getElementById('rs-time').value       = time;
   openModal('rsModal');
 }
-
 function openCancel(id, type) {
   document.getElementById('cancel-id').value         = id;
   document.getElementById('cancel-type').textContent = type;
   openModal('cancelModal');
 }
-
 function openDelete(id, type) {
   document.getElementById('delete-id').value         = id;
   document.getElementById('delete-type').textContent = type;
@@ -537,10 +640,6 @@ function filterAppts(filter, btn) {
     item.style.display = (filter === 'all' || item.dataset.filter === filter) ? 'flex' : 'none';
   });
 }
-
-/* ─── Auto-dismiss toast ─── */
-const toast = document.getElementById('toast');
-if (toast) setTimeout(() => { toast.style.opacity = '0'; }, 3500);
 </script>
 </body>
 </html>
